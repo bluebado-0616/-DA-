@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口一：入金出金统计看板</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin:0; padding:20px; font-family:system-ui, "Microsoft YaHei", sans-serif; background:#f4f7f6; color:#333; }
+        .container { max-width:1280px; margin:auto; }
+        h2 { text-align:center; margin:0 0 8px; }
+        .subtitle { text-align:center; color:#666; margin-bottom:18px; }
+        .controls, .panel, .stat-card { background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .controls { padding:14px; margin-bottom:18px; text-align:center; }
+        .controls form { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; }
+        input, button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; }
+        button { border-color:#0066cc; background:#0066cc; color:#fff; cursor:pointer; }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:14px; margin-bottom:18px; }
+        .stat-card { padding:16px; border-top:4px solid #0066cc; }
+        .stat-label { color:#68717a; font-size:13px; }
+        .stat-value { margin-top:6px; font-size:23px; font-weight:700; word-break:break-all; }
+        .positive { color:#159447; }
+        .negative { color:#d33c3c; }
+        .note { margin:-6px 0 18px; color:#68717a; font-size:13px; text-align:center; }
+        .chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(380px, 1fr)); gap:18px; }
+        .panel { padding:16px; min-width:0; }
+        .panel h3 { margin:0 0 8px; font-size:16px; }
+        .chart { width:100%; height:340px; }
+        @media (max-width:520px) { .chart-grid { grid-template-columns:1fr; } .chart { height:300px; } }
+    </style>
+</head>
+<body>
+<main class="container">
+    <h2>接口一：入金、出金及净入金</h2>
+    <div class="subtitle">统计周期：{{ date_label }}</div>
+
+    <div class="controls">
+        <form method="get" action="/pyapi/all/stat/dashboard">
+            <label>开始日期：<input type="date" name="start" value="{{ start }}" required></label>
+            <label>结束日期：<input type="date" name="end" value="{{ end }}" required></label>
+            <button type="submit">查询</button>
+        </form>
+    </div>
+
+    <section class="stats">
+        <div class="stat-card"><div class="stat-label">入金人数</div><div class="stat-value">{{ summary.deposit_user_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">入金笔数</div><div class="stat-value">{{ summary.deposit_order_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">入金金额</div><div class="stat-value">{{ "%.2f"|format(summary.deposit_dollar_sum) }}</div></div>
+        <div class="stat-card"><div class="stat-label">出金人数</div><div class="stat-value">{{ summary.withdraw_user_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">出金笔数</div><div class="stat-value">{{ summary.withdraw_order_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">出金金额</div><div class="stat-value">{{ "%.2f"|format(summary.withdraw_dollar_sum) }}</div></div>
+        <div class="stat-card"><div class="stat-label">净入金</div><div class="stat-value {% if summary.net_dollar_sum >= 0 %}positive{% else %}negative{% endif %}">{{ "%.2f"|format(summary.net_dollar_sum) }}</div></div>
+        <div class="stat-card"><div class="stat-label">总人数（区间去重）</div><div class="stat-value">{{ summary.total_user_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">总笔数</div><div class="stat-value">{{ summary.total_order_cnt }}</div></div>
+        <div class="stat-card"><div class="stat-label">总金额</div><div class="stat-value">{{ "%.2f"|format(summary.total_dollar_sum) }}</div></div>
+    </section>
+    {% if uses_historical_cache %}
+    <div class="note">历史缓存不保存账号明细，人数指标为每日去重人数累计；金额与笔数为所选区间准确合计。</div>
+    {% endif %}
+
+    <section class="chart-grid">
+        <div class="panel"><h3>每日金额趋势</h3><div id="amountChart" class="chart"></div></div>
+        <div class="panel"><h3>每日订单趋势</h3><div id="orderChart" class="chart"></div></div>
+        <div class="panel"><h3>每日用户趋势</h3><div id="userChart" class="chart"></div></div>
+    </section>
+</main>
+
+<script>
+    const chartData = {{ chart_data | safe }};
+    const dates = chartData.map(row => row["日期"]);
+    const baseOption = {
+        tooltip: { trigger: "axis" },
+        legend: { top: 0 },
+        grid: { left: 55, right: 25, top: 50, bottom: 65 },
+        xAxis: { type: "category", data: dates, axisLabel: { rotate: 35 } },
+        yAxis: { type: "value", splitLine: { lineStyle: { type: "dashed" } } },
+        dataZoom: dates.length > 31 ? [{ type: "inside" }, { type: "slider", bottom: 8 }] : [],
+    };
+
+    function renderChart(id, fields) {
+        const chart = echarts.init(document.getElementById(id));
+        chart.setOption({
+            ...baseOption,
+            series: fields.map((field, index) => ({
+                name: field,
+                type: "line",
+                smooth: true,
+                showSymbol: dates.length <= 31,
+                data: chartData.map(row => row[field]),
+                lineStyle: { width: field === "净入金" ? 3 : 2 },
+                areaStyle: index === 0 ? { opacity: .08 } : undefined,
+            })),
+        });
+        return chart;
+    }
+
+    const charts = [
+        renderChart("amountChart", ["入金金额", "出金金额", "净入金"]),
+        renderChart("orderChart", ["入金笔数", "出金笔数", "总笔数"]),
+        renderChart("userChart", ["入金人数", "出金人数", "总人数"]),
+    ];
+    window.addEventListener("resize", () => charts.forEach(chart => chart.resize()));
+</script>
+</body>
+</html>

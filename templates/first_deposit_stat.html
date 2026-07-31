@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>首入金统计 - {{ year }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:20px; font-family:system-ui, "Microsoft YaHei", sans-serif; background:#f4f7f6; color:#333; }
+        .container { max-width:1180px; margin:auto; }
+        h2 { margin:0 0 8px; text-align:center; }
+        .subtitle, .note { color:#68717a; text-align:center; }
+        .subtitle { margin-bottom:18px; }
+        .note { margin:12px 0 18px; font-size:13px; }
+        .controls, .panel, .stat-card { background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .controls { padding:14px; margin-bottom:18px; text-align:center; }
+        input, button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; }
+        button { border-color:#0066cc; background:#0066cc; color:#fff; cursor:pointer; }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:14px; margin-bottom:18px; }
+        .stat-card { padding:16px; border-top:4px solid #0066cc; }
+        .stat-label { color:#68717a; font-size:13px; }
+        .stat-value { margin-top:6px; font-size:23px; font-weight:700; }
+        .chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:18px; margin-bottom:18px; }
+        .panel { padding:16px; min-width:0; overflow-x:auto; }
+        .panel h3 { margin:0 0 8px; font-size:16px; }
+        .chart { width:100%; height:360px; }
+        table { width:100%; border-collapse:collapse; min-width:760px; }
+        th { padding:11px; background:#0066cc; color:#fff; white-space:nowrap; }
+        td { padding:10px; text-align:center; border-bottom:1px solid #e6e9ec; }
+        tbody tr:hover { background:#f7f9fb; }
+        @media (max-width:520px) { .chart-grid { grid-template-columns:1fr; } .chart { height:300px; } }
+    </style>
+</head>
+<body>
+<main class="container">
+    <h2>首入金统计</h2>
+    <div class="subtitle">{{ year }} 年月度首入金及转化趋势</div>
+
+    <div class="controls">
+        <form method="get" action="/pyapi/first/deposit/stat">
+            <label>统计年份：
+                <input type="number" name="year" value="{{ year }}" min="2015" max="2035" required>
+            </label>
+            <button type="submit">查询</button>
+        </form>
+    </div>
+
+    <section class="stats">
+        <div class="stat-card"><div class="stat-label">年度首入金数</div><div class="stat-value">{{ result.year_num }}</div></div>
+        <div class="stat-card"><div class="stat-label">年度真实开户数</div><div class="stat-value">{{ result.year_real_num }}</div></div>
+        <div class="stat-card"><div class="stat-label">开户转化率</div><div class="stat-value">{{ result.year_rate }}</div></div>
+        <div class="stat-card"><div class="stat-label">当月被推荐用户首入金数</div><div class="stat-value">{{ result.year_tjynum }}</div></div>
+        <div class="stat-card"><div class="stat-label">被推荐用户首入金占比</div><div class="stat-value">{{ result.year_tjyrate }}</div></div>
+    </section>
+
+    <div class="note">时间按伦敦金交易日计算：夏令时 05:00、冬令时 06:00 切换交易日。</div>
+
+    <section class="chart-grid">
+        <div class="panel"><h3>月度人数趋势</h3><div id="countChart" class="chart"></div></div>
+        <div class="panel"><h3>月度转化率趋势</h3><div id="rateChart" class="chart"></div></div>
+    </section>
+
+    <section class="panel">
+        <h3>月度统计明细</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>月份</th>
+                    <th>首入金数</th>
+                    <th>真实开户数</th>
+                    <th>开户转化率</th>
+                    <th>当月被推荐用户首入金数</th>
+                    <th>被推荐用户首入金占比</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.list %}
+                <tr>
+                    <td>{{ row.date1 }}</td>
+                    <td>{{ row.num }}</td>
+                    <td>{{ row.real_num }}</td>
+                    <td>{{ row.rate }}</td>
+                    <td>{{ row.tjy_num }}</td>
+                    <td>{{ row.tyr_rate }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</main>
+
+<script>
+    const chartData = {{ chart_data | safe }};
+    const months = chartData.map(row => row.date1);
+    const baseOption = {
+        tooltip: { trigger:"axis" },
+        legend: { top:0 },
+        grid: { left:58, right:25, top:50, bottom:45 },
+        xAxis: { type:"category", data:months },
+    };
+
+    const countChart = echarts.init(document.getElementById("countChart"));
+    countChart.setOption({
+        ...baseOption,
+        yAxis: { type:"value", name:"人数", splitLine:{ lineStyle:{ type:"dashed" } } },
+        series: [
+            { name:"首入金数", type:"line", smooth:true, data:chartData.map(row => row.num) },
+            { name:"真实开户数", type:"line", smooth:true, data:chartData.map(row => row.real_num) },
+            { name:"当月被推荐用户首入金数", type:"line", smooth:true, data:chartData.map(row => row.tjy_num) },
+        ],
+    });
+
+    const rateChart = echarts.init(document.getElementById("rateChart"));
+    rateChart.setOption({
+        ...baseOption,
+        yAxis: { type:"value", name:"百分比", axisLabel:{ formatter:"{value}%" }, splitLine:{ lineStyle:{ type:"dashed" } } },
+        series: [
+            { name:"开户转化率", type:"line", smooth:true, data:chartData.map(row => parseFloat(row.rate)) },
+            { name:"被推荐用户首入金占比", type:"line", smooth:true, data:chartData.map(row => parseFloat(row.tyr_rate)) },
+        ],
+    });
+
+    window.addEventListener("resize", () => {
+        countChart.resize();
+        rateChart.resize();
+    });
+</script>
+</body>
+</html>

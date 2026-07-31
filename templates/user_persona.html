@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户画像统计 - {{ start_year }} ~ {{ end_year }}</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome (for icons) -->
+    <link href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.5.1/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0d6efd;
+            --secondary-color: #6c757d;
+            --bg-color: #f4f7f6;
+            --card-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        }
+        body { font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, "Microsoft YaHei", sans-serif; background-color: var(--bg-color); padding-top: 20px; }
+        .dashboard-card { border: none; border-radius: 12px; box-shadow: var(--card-shadow); margin-bottom: 20px; transition: transform 0.2s; }
+        .dashboard-card:hover { transform: translateY(-3px); }
+        .card-header { background-color: #fff; border-bottom: 1px solid #eee; font-weight: bold; padding: 15px 20px; border-radius: 12px 12px 0 0 !important; }
+        .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary-color); }
+        .stat-label { font-size: 0.9rem; color: var(--secondary-color); }
+        .chart-container { width: 100%; height: 350px; }
+        .table-container { background: white; border-radius: 12px; padding: 20px; box-shadow: var(--card-shadow); }
+        .inner-table { font-size: 0.85rem; width: 100%; }
+        .inner-table th { background: #f8f9fa; }
+        
+        /* 跨年度表格样式优化 */
+        #mainStatTable { font-family: "SimHei", "Microsoft YaHei", sans-serif; }
+        #mainStatTable th, #mainStatTable td { 
+            text-align: center !important; 
+            vertical-align: middle !important;
+            border-left: 1px solid #dee2e6;
+            border-right: 1px solid #dee2e6;
+        }
+        #mainStatTable thead th { background-color: #f8f9fa; border-bottom: 2px solid #dee2e6; }
+        
+        .dimension-summary {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+        }
+        .dimension-item {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 2px;
+            width: 100%;
+        }
+        .dimension-label { color: #6c757d; min-width: 65px; text-align: right; }
+        .dimension-value { font-weight: bold; color: #212529; min-width: 55px; text-align: left; }
+
+        .export-btn { margin-bottom: 15px; }
+        .sticky-form { position: sticky; top: 0; z-index: 1000; background: rgba(255,255,255,0.9); backdrop-filter: blur(5px); padding: 15px; border-radius: 12px; margin-bottom: 25px; box-shadow: var(--card-shadow); }
+        .nav-tabs .nav-link { color: #495057; font-weight: 500; }
+        .nav-tabs .nav-link.active { color: var(--primary-color); border-bottom: 3px solid var(--primary-color); border-top: none; border-left: none; border-right: none; }
+        .badge-info { background-color: #e6f3ff; color: #0d6efd; font-weight: normal; }
+    </style>
+</head>
+<body>
+    <div class="container-fluid px-4">
+        <!-- Header Section -->
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+                <h1 class="h3 mb-1"><i class="fas fa-chart-pie me-2 text-primary"></i>用户画像洞察仪表盘</h1>
+                <p class="text-muted small">统计周期：{{ start_year }} ~ {{ end_year }} | 业务维度：<span class="badge badge-info">{{ user_type }}</span></p>
+            </div>
+            <div class="btn-group">
+                <button onclick="exportToExcel()" class="btn btn-outline-success btn-sm">
+                    <i class="fas fa-file-excel me-1"></i> 导出 Excel
+                </button>
+                <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">
+                    <i class="fas fa-print me-1"></i> 打印 PDF
+                </button>
+            </div>
+        </div>
+
+        <!-- Filter Section (Sticky) -->
+        <div class="sticky-form">
+            <form class="row g-3" method="get" action="/pyapi/user/persona">
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">开始年份</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                        <input type="number" name="start_year" class="form-control" value="{{ start_year }}" min="2015" max="2035">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-bold">结束年份</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-calendar-alt"></i></span>
+                        <input type="number" name="end_year" class="form-control" value="{{ end_year }}" min="2015" max="2035">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">统计类型</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-chart-bar"></i></span>
+                        <select name="user_type" class="form-select">
+                            <optgroup label="交易人数">
+                            {% for t in ["开仓人数", "平仓人数", "开仓+平仓 人数", "开仓人数(A)", "平仓人数(A)", "开仓+平仓 人数(A)"] %}
+                            <option value="{{ t }}" {% if user_type == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                            </optgroup>
+                            <optgroup label="交易手数">
+                            {% for t in ["开仓手数", "平仓手数", "开仓+平仓 手数", "开仓手数(A)", "平仓手数(A)", "开仓+平仓 手数(A)"] %}
+                            <option value="{{ t }}" {% if user_type == t %}selected{% endif %}>{{ t }}</option>
+                            {% endfor %}
+                            </optgroup>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small fw-bold">年龄维度</label>
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text"><i class="fas fa-birthday-cake"></i></span>
+                        <select name="age_type" class="form-select">
+                            <option value="current" {% if age_type == "current" %}selected{% endif %}>当前年龄</option>
+                            <option value="opening" {% if age_type == "opening" %}selected{% endif %}>开户年龄</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary btn-sm w-100 fw-bold">
+                        <i class="fas fa-search me-1"></i> 执行分析
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Data Visualization Area -->
+        <div id="dashboard-content">
+            <!-- Year Selector Tabs -->
+            <ul class="nav nav-tabs mb-4" id="yearTabs" role="tablist">
+                <!-- Tabs will be generated by JS -->
+            </ul>
+
+            <div class="tab-content" id="yearTabsContent">
+                <!-- Tab panes will be generated by JS -->
+            </div>
+        </div>
+
+        <!-- Detailed Data Table Section -->
+        <div class="mt-5 mb-5">
+            <div class="table-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0 fw-bold"><i class="fas fa-table me-2 text-primary"></i>跨年度数据概览</h5>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle border-top" id="mainStatTable">
+                        <thead class="table-light">
+                            <tr>
+                                <th>年度</th>
+                                <th>分析维度</th>
+                                <th class="text-end">{{ "贡献手数" if is_volume else "人数" }}</th>
+                                <th>{{ "开户年龄" if age_type == "opening" else "当前年龄" }}分布</th>
+                                <th>性别占比</th>
+                                <th>Top 地域分布</th>
+                                {% if not is_volume %}
+                                <th>开户来源</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody id="tableBody">
+                            <!-- Table rows will be generated by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+    <script>
+        const rawData = {{ results_json | safe }};
+        const targetKey = "{{ target_key }}";
+        const userType = "{{ user_type }}";
+        const ageType = "{{ age_type }}";
+        const ageLabel = ageType === "opening" ? "开户年龄" : "当前年龄";
+        const isVolume = {{ "true" if is_volume else "false" }};
+        const valueKey = isVolume ? "volume" : "count";
+        const valueUnit = isVolume ? "手" : "人";
+
+        // Initialize Dashboard
+        const initializedYears = new Set();
+
+        document.addEventListener('DOMContentLoaded', function() {
+            renderDashboard();
+            
+            // Add tab switch listener to initialize charts for each year when shown
+            const yearTabs = document.getElementById('yearTabs');
+            yearTabs.addEventListener('shown.bs.tab', function (event) {
+                const year = event.target.getAttribute('data-year');
+                if (year && !initializedYears.has(year)) {
+                    const item = rawData.find(d => d.year == year);
+                    if (item) {
+                        const yearData = item.user_groups[targetKey] || {};
+                        initYearCharts(year, getDistribution(yearData));
+                        initializedYears.add(year);
+                    }
+                }
+            });
+
+            // Global resize listener
+            window.addEventListener('resize', () => {
+                document.querySelectorAll('.chart-container').forEach(el => {
+                    const chart = echarts.getInstanceByDom(el);
+                    if (chart) chart.resize();
+                });
+            });
+        });
+
+        function renderDashboard() {
+            if (!rawData || rawData.length === 0) {
+                document.getElementById('dashboard-content').innerHTML = `
+                    <div class="alert alert-info border-0 shadow-sm rounded-3">
+                        <i class="fas fa-info-circle me-2"></i> 暂无指定周期下的用户画像数据，请调整筛选条件重试。
+                    </div>`;
+                return;
+            }
+
+            const tabs = document.getElementById('yearTabs');
+            const content = document.getElementById('yearTabsContent');
+            const tableBody = document.getElementById('tableBody');
+
+            // Clear previous
+            tabs.innerHTML = '';
+            content.innerHTML = '';
+            tableBody.innerHTML = '';
+            initializedYears.clear();
+
+            // Sorted years (descending)
+            const sortedData = [...rawData].sort((a, b) => b.year - a.year);
+
+            sortedData.forEach((item, index) => {
+                const year = item.year;
+                const yearData = item.user_groups[targetKey] || {};
+                const persona = getDistribution(yearData);
+                const totalValue = isVolume ? (yearData.total_volume || 0) : (yearData.count || 0);
+
+                // 1. Create Tab
+                const tabId = `tab-${year}`;
+                const isActive = index === 0 ? 'active' : '';
+                tabs.innerHTML += `
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link ${isActive}" id="${tabId}-tab" data-bs-toggle="tab" data-bs-target="#${tabId}" type="button" role="tab" data-year="${year}">${year}年度</button>
+                    </li>`;
+
+                // 2. Create Tab Content
+                const pane = document.createElement('div');
+                pane.className = `tab-pane fade ${index === 0 ? 'show active' : ''}`;
+                pane.id = tabId;
+                pane.innerHTML = generateYearPane(year, yearData);
+                content.appendChild(pane);
+
+                // Only initialize charts for the first (active) tab
+                if (index === 0) {
+                    setTimeout(() => {
+                        initYearCharts(year, persona);
+                        initializedYears.add(year.toString());
+                    }, 200);
+                }
+
+                // 3. Create Table Row
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td class="fw-bold text-primary">${year}</td>
+                    <td><span class="badge badge-info">${userType}</span></td>
+                    <td class="text-end fw-bold">${formatValue(totalValue)}${valueUnit}</td>
+                    <td>${generateSparklineSummary(persona.age_distribution, 'age_group')}</td>
+                    <td>${generateSparklineSummary(persona.gender_distribution, 'appellation')}</td>
+                    <td>${generateRegionSummary(persona.region_distribution)}</td>
+                    ${isVolume ? '' : `<td>${generateSparklineSummary(persona.source_distribution, 'source_name')}</td>`}
+                `;
+                tableBody.appendChild(row);
+            });
+        }
+
+        function getDistribution(yearData) {
+            return (isVolume ? yearData.volume_persona : yearData.persona) || {};
+        }
+
+        function formatValue(value) {
+            const number = Number(value) || 0;
+            return isVolume
+                ? number.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : number.toLocaleString();
+        }
+
+        function generateYearPane(year, data) {
+            const totalValue = isVolume ? (data.total_volume || 0) : (data.count || 0);
+            const metricColumn = isVolume ? 'col-md-6' : 'col-md-3';
+            const genderColumn = isVolume ? 'col-md-6' : 'col-md-3';
+            return `
+                <div class="row g-4">
+                    <!-- Metrics Row -->
+                    <div class="${metricColumn}">
+                        <div class="card dashboard-card h-100">
+                            <div class="card-body text-center d-flex flex-column justify-content-center">
+                                <div class="stat-label">${isVolume ? '总贡献手数' : '总交易用户数'}</div>
+                                <div class="stat-value my-2">${formatValue(totalValue)} <span class="fs-6 text-muted fw-normal">${valueUnit}</span></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="${genderColumn}">
+                        <div class="card dashboard-card h-100">
+                            <div class="card-header"><i class="fas fa-venus-mars me-2 text-danger"></i>性别${isVolume ? '手数贡献' : '比例'}</div>
+                            <div class="card-body">
+                                <div id="chart-gender-${year}" class="chart-container" style="height: 180px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    ${isVolume ? '' : `
+                    <div class="col-md-6">
+                        <div class="card dashboard-card h-100">
+                            <div class="card-header"><i class="fas fa-mobile-alt me-2 text-info"></i>终端分布 (Source)</div>
+                            <div class="card-body">
+                                <div id="chart-source-${year}" class="chart-container" style="height: 180px;"></div>
+                            </div>
+                        </div>
+                    </div>
+                    `}
+
+                    <!-- Main Charts Row -->
+                    <div class="col-md-6">
+                        <div class="card dashboard-card">
+                            <div class="card-header"><i class="fas fa-birthday-cake me-2 text-warning"></i>${ageLabel}段${isVolume ? '手数贡献' : '分布'}</div>
+                            <div class="card-body">
+                                <div id="chart-age-${year}" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card dashboard-card">
+                            <div class="card-header"><i class="fas fa-map-marker-alt me-2 text-success"></i>地域${isVolume ? '手数贡献' : '分布'} Top 10</div>
+                            <div class="card-body">
+                                <div id="chart-region-${year}" class="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initYearCharts(year, persona) {
+            if (!persona) return;
+
+            // Helper to get or init chart
+            const getChart = (id) => {
+                const dom = document.getElementById(id);
+                if (!dom) return null;
+                return echarts.getInstanceByDom(dom) || echarts.init(dom);
+            };
+
+            // Gender Chart
+            const genderChart = getChart(`chart-gender-${year}`);
+            if (genderChart) {
+                genderChart.setOption({
+                    tooltip: { trigger: 'item', formatter: `{b}: {c}${valueUnit} ({d}%)` },
+                    series: [{
+                        type: 'pie', radius: ['40%', '70%'], avoidLabelOverlap: false,
+                        label: { show: true, position: 'inside', formatter: '{d}%' },
+                        data: (persona.gender_distribution || []).map(g => ({ value: g[valueKey], name: g.appellation })),
+                        color: ['#0d6efd', '#fd7e14', '#adb5bd']
+                    }]
+                });
+            }
+
+            // Source Chart
+            const sourceChart = isVolume ? null : getChart(`chart-source-${year}`);
+            if (sourceChart) {
+                sourceChart.setOption({
+                    tooltip: { trigger: 'item' },
+                    series: [{
+                        type: 'pie', radius: '60%', center: ['50%', '50%'],
+                        data: (persona.source_distribution || []).map(s => ({ value: s.count, name: s.source_name })),
+                        label: { show: true, formatter: '{b}: {d}%' }
+                    }]
+                });
+            }
+
+            // Age Chart
+            const ageChart = getChart(`chart-age-${year}`);
+            if (ageChart) {
+                ageChart.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                    grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+                    xAxis: { type: 'category', data: (persona.age_distribution || []).map(a => a.age_group) },
+                    yAxis: { type: 'value', name: isVolume ? '手数' : '人数' },
+                    series: [{
+                        name: isVolume ? '手数' : '人数', type: 'bar', barWidth: '40%',
+                        data: (persona.age_distribution || []).map(a => a[valueKey]),
+                        itemStyle: { color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{offset: 0, color: '#83bff6'},{offset: 0.5, color: '#188df0'},{offset: 1, color: '#188df0'}]) }
+                    }]
+                });
+            }
+
+            // Region Chart
+            const regionData = [...(persona.region_distribution || [])].sort((a, b) => b[valueKey] - a[valueKey]).slice(0, 10);
+            const regionChart = getChart(`chart-region-${year}`);
+            if (regionChart) {
+                regionChart.setOption({
+                    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+                    grid: { left: '3%', right: '8%', bottom: '3%', containLabel: true },
+                    xAxis: { type: 'value', name: isVolume ? '手数' : '人数' },
+                    yAxis: { type: 'category', data: regionData.map(r => r.region).reverse() },
+                    series: [{
+                        name: isVolume ? '手数' : '人数', type: 'bar',
+                        data: regionData.map(r => r[valueKey]).reverse(),
+                        label: { show: true, position: 'right' },
+                        itemStyle: { color: '#20c997' }
+                    }]
+                });
+            }
+        }
+
+        function generateSparklineSummary(list, labelKey) {
+            if (!list || list.length === 0) return '<span class="text-muted small">-</span>';
+            return `<div class="dimension-summary">` + 
+                list.map(item => `
+                    <div class="dimension-item">
+                        <span class="dimension-label">${item[labelKey]}:</span>
+                        <span class="dimension-value">${item.percentage}</span>
+                    </div>`).join('') + `</div>`;
+        }
+
+        function generateRegionSummary(list) {
+            if (!list || list.length === 0) return '<span class="text-muted small">-</span>';
+            const top = [...list].sort((a, b) => b[valueKey] - a[valueKey]).slice(0, 3);
+            return `<div class="dimension-summary">` + 
+                top.map(item => `
+                    <div class="dimension-item">
+                        <span class="dimension-label">${item.region}:</span>
+                        <span class="dimension-value">${formatValue(item[valueKey])}${valueUnit}</span>
+                    </div>`).join('') + 
+                (list.length > 3 ? `<div class="text-muted" style="font-size: 0.7rem;">...等共 ${list.length} 个地区</div>` : '') +
+                `</div>`;
+        }
+
+        function exportToExcel() {
+            const data = [];
+            rawData.forEach(item => {
+                const year = item.year;
+                const yearData = item.user_groups[targetKey] || {};
+                const p = getDistribution(yearData);
+                const totalValue = isVolume ? (yearData.total_volume || 0) : (yearData.count || 0);
+                const metricName = isVolume ? "手数" : "人数";
+                
+                // Base info
+                const row = {
+                    "年度": year,
+                    "业务维度": userType,
+                    [`总${metricName}`]: totalValue
+                };
+
+                // Age Distribution
+                (p.age_distribution || []).forEach(a => {
+                    row[`${ageLabel}段_${a.age_group}_${metricName}`] = a[valueKey];
+                    row[`${ageLabel}段_${a.age_group}_占比`] = a.percentage;
+                });
+
+                // Gender
+                (p.gender_distribution || []).forEach(g => {
+                    row[`性别_${g.appellation}_${metricName}`] = g[valueKey];
+                    row[`性别_${g.appellation}_占比`] = g.percentage;
+                });
+
+                // Source
+                if (!isVolume) {
+                    (p.source_distribution || []).forEach(s => {
+                        row[`来源_${s.source_name}_人数`] = s.count;
+                        row[`来源_${s.source_name}_占比`] = s.percentage;
+                    });
+                }
+
+                // Top 5 Regions
+                const topRegions = [...(p.region_distribution || [])].sort((a, b) => b[valueKey] - a[valueKey]).slice(0, 5);
+                topRegions.forEach((r, i) => {
+                    row[`地域Top${i+1}_名称`] = r.region;
+                    row[`地域Top${i+1}_${metricName}`] = r[valueKey];
+                    row[`地域Top${i+1}_占比`] = r.percentage;
+                });
+
+                data.push(row);
+            });
+
+            const worksheet = XLSX.utils.json_to_sheet(data);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "用户画像分析");
+            
+            // Auto-width columns (simple)
+            const wscols = [{wch: 10}, {wch: 20}, {wch: 10}];
+            worksheet['!cols'] = wscols;
+
+            XLSX.writeFile(workbook, `User_Persona_Analysis_${new Date().getTime()}.xlsx`);
+        }
+    </script>
+</body>
+</html>

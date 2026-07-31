@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口三：月交易人数统计 - {{ year }}</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background:#f4f7f6; margin:0; padding:20px; display:flex; flex-direction:column; align-items:center; }
+        .container { width:100%; max-width:1100px; background:white; padding:24px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.08); overflow-x:auto; box-sizing:border-box; }
+        h2 { color:#333; text-align:center; margin-bottom:0.5rem; }
+        .controls { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:0.75rem; margin-bottom:1rem; font-size:0.9rem; }
+        .controls input[type="number"] { width:80px; padding:4px 6px; font-size:0.9rem; }
+        .controls button { padding:4px 10px; font-size:0.9rem; cursor:pointer; background:#0066cc; color:white; border:none; border-radius:4px; }
+        .chart-panel { margin:18px 0 24px; border:1px solid #edf0f2; border-radius:8px; padding:12px; }
+        #trendChart { width:100%; height:400px; }
+        .stat-table { width:100%; border-collapse:collapse; font-size:15px; margin-top: 10px; }
+        .stat-table th { background:#0066cc; color:white; padding:12px; text-align:center; white-space:nowrap; }
+        .stat-table td { padding:12px; text-align:center; border-bottom:1px solid #e0e0e0; color:#444; }
+        .stat-table tr:hover { background:#f8f9fa; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>接口三：月交易人数统计</h2>
+        <form class="controls" method="get" action="/pyapi/year/stat">
+            <label>统计年份：
+                <input type="number" name="year" value="{{ year }}" min="2000" max="2035" required>
+            </label>
+            <button type="submit">查询</button>
+        </form>
+        <div class="chart-panel">
+            <div id="trendChart"></div>
+        </div>
+        <div class="table-responsive">
+            {{ table_html | safe }}
+        </div>
+    </div>
+    <script>
+        const chartData = {{ chart_data | safe }}.filter(row => row["年月"] !== "全年");
+        const fields = ["开仓人数", "平仓人数", "开仓+平仓 人数", "开仓人数(A)", "平仓人数(A)", "开仓+平仓 人数(A)"];
+        const chart = echarts.init(document.getElementById("trendChart"));
+        chart.setOption({
+            title: { text: "{{ year }} 年月度交易人数趋势", left: "center" },
+            tooltip: { trigger: "axis" },
+            legend: { type: "scroll", top: 35 },
+            grid: { left: 55, right: 25, top: 85, bottom: 45 },
+            xAxis: { type: "category", data: chartData.map(row => row["年月"]) },
+            yAxis: { type: "value", name: "人数", splitLine: { lineStyle: { type: "dashed" } } },
+            series: fields.map(field => ({
+                name: field,
+                type: "line",
+                smooth: true,
+                data: chartData.map(row => row[field]),
+            })),
+        });
+        window.addEventListener("resize", () => chart.resize());
+    </script>
+</body>
+</html>

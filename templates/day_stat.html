@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口二：日交易人数</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: system-ui, sans-serif; background:#f4f7f6; margin:0; padding:20px; display:flex; flex-direction:column; align-items:center; }
+        .container { width:100%; max-width:1100px; background:white; padding:24px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.08); overflow-x:auto; box-sizing:border-box; }
+        h2 { color:#333; text-align:center; margin-bottom:0.5rem; }
+        .filter { color:#555; text-align:center; margin-bottom:1rem; font-size:0.95rem; }
+        .controls form { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; margin:16px 0; }
+        .controls input, .controls button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; }
+        .controls button { background:#0066cc; border-color:#0066cc; color:white; cursor:pointer; }
+        .chart-panel { margin:18px 0 24px; border:1px solid #edf0f2; border-radius:8px; padding:12px; }
+        #trendChart { width:100%; height:400px; }
+        .stat-table { width:100%; border-collapse:collapse; font-size:15px; }
+        .stat-table th { background:#0066cc; color:white; padding:12px; text-align:center; white-space:nowrap; }
+        .stat-table td { padding:12px; text-align:center; border-bottom:1px solid #e0e0e0; color:#444; }
+        .stat-table tr:hover { background:#f8f9fa; }
+        .pagination { margin-top:1.5rem; display:flex; align-items:center; justify-content:center; gap:1.5rem; flex-wrap:wrap; }
+        .pagination a { color:#0066cc; text-decoration:none; }
+        .pagination a:hover { text-decoration:underline; }
+        .pagination span { color:#999; }
+        .note { margin-top:1rem; color:#555; font-size:0.9rem; text-align:center; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>接口二：日交易人数</h2>
+        <div class="filter">统计周期：{{ date_label }}</div>
+        <div class="controls">
+            <form method="get" action="/pyapi/day/stat">
+                <label>开始日期：<input type="date" name="start" value="{{ start }}" required></label>
+                <label>结束日期：<input type="date" name="end" value="{{ end }}" required></label>
+                <button type="submit">查询</button>
+            </form>
+        </div>
+        <div class="chart-panel">
+            <div id="trendChart"></div>
+        </div>
+        {{ table_html | safe }}
+        <div class="pagination">
+            {% if page > 1 %}
+                <a href="{{ pagination_url(page - 1) }}">上一页</a>
+            {% else %}
+                <span>上一页</span>
+            {% endif %}
+            | {{ page_info }} |
+            {% if page < total_pages %}
+                <a href="{{ pagination_url(page + 1) }}">下一页</a>
+            {% else %}
+                <span>下一页</span>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+        const chartData = {{ chart_data | safe }};
+        const fields = ["开仓人数", "平仓人数", "开仓+平仓 人数", "开仓人数(A)", "平仓人数(A)", "开仓+平仓 人数(A)"];
+        const chart = echarts.init(document.getElementById("trendChart"));
+        chart.setOption({
+            title: { text: "每日交易人数趋势", left: "center" },
+            tooltip: { trigger: "axis" },
+            legend: { type: "scroll", top: 35 },
+            grid: { left: 55, right: 25, top: 85, bottom: 70 },
+            xAxis: { type: "category", data: chartData.map(row => row["日期"]), axisLabel: { rotate: 35 } },
+            yAxis: { type: "value", name: "人数", splitLine: { lineStyle: { type: "dashed" } } },
+            dataZoom: chartData.length > 31 ? [{ type: "inside" }, { type: "slider", bottom: 8 }] : [],
+            series: fields.map(field => ({
+                name: field,
+                type: "line",
+                smooth: true,
+                showSymbol: chartData.length <= 31,
+                data: chartData.map(row => row[field]),
+            })),
+        });
+        window.addEventListener("resize", () => chart.resize());
+    </script>
+</body>
+</html>
