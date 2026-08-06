@@ -61,16 +61,17 @@ def get_valid_login_codes() -> set:
 
 @lru_cache(maxsize=1)
 def get_activated_login_codes() -> set:
+    """已激活账户：gold.js_bank_notify 中支付成功(iPayResult=1)的账户。"""
     try:
         sql = """
-            SELECT DISTINCT login
-            FROM js_day_jyr
-            WHERE rjtime != '1970-01-01 00:00:00' AND rjtime IS NOT NULL
+            SELECT DISTINCT sUserName
+            FROM js_bank_notify
+            WHERE iPayResult = 1
         """
-        df = pd.read_sql(sql, engine_trade)
+        df = pd.read_sql(sql, engine_finance)
         if df.empty:
             return set()
-        df['login_code'] = extract_login_code(df['login'])
+        df['login_code'] = extract_login_code(df['sUserName'])
         activated = df[df['login_code'] != '0']['login_code'].unique()
         return set(activated)
     except Exception as e:
