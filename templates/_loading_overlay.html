@@ -1,0 +1,98 @@
+<style>
+    .page-loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 14px 20px;
+        background: rgba(255, 255, 255, 0.96);
+        border-bottom: 1px solid rgba(0, 102, 204, 0.15);
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        backdrop-filter: blur(4px);
+        transition: opacity 0.2s ease, visibility 0.2s ease, transform 0.2s ease;
+    }
+    .page-loading-overlay.is-hidden {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transform: translateY(-100%);
+    }
+    .page-loading-box {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 18px;
+        font-weight: 600;
+        color: #0066cc;
+        letter-spacing: 0.5px;
+    }
+    .page-loading-spinner {
+        width: 22px;
+        height: 22px;
+        border: 3px solid rgba(0, 102, 204, 0.2);
+        border-top-color: #0066cc;
+        border-radius: 50%;
+        animation: page-loading-spin 0.8s linear infinite;
+    }
+    @keyframes page-loading-spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+<div id="pageLoadingOverlay" class="page-loading-overlay" aria-live="polite" aria-busy="true">
+    <div class="page-loading-box">
+        <span class="page-loading-spinner" aria-hidden="true"></span>
+        <span>加载中...</span>
+    </div>
+</div>
+<script>
+(function () {
+    const overlay = document.getElementById("pageLoadingOverlay");
+    if (!overlay) return;
+
+    function showLoading() {
+        overlay.classList.remove("is-hidden");
+        overlay.setAttribute("aria-busy", "true");
+    }
+
+    function hideLoading() {
+        overlay.classList.add("is-hidden");
+        overlay.setAttribute("aria-busy", "false");
+    }
+
+    window.showPageLoading = showLoading;
+    window.hidePageLoading = hideLoading;
+
+    document.addEventListener("submit", function (event) {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement)) return;
+        if ((form.method || "get").toLowerCase() === "dialog") return;
+        showLoading();
+    }, true);
+
+    document.addEventListener("click", function (event) {
+        const link = event.target.closest("a[href]");
+        if (!link) return;
+
+        const href = link.getAttribute("href");
+        if (!href || href.startsWith("#") || href.startsWith("javascript:")) return;
+        if (link.target === "_blank") return;
+        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+        if (href.startsWith("http") && !href.startsWith(window.location.origin)) return;
+
+        showLoading();
+    }, true);
+
+    window.addEventListener("pageshow", function (event) {
+        if (event.persisted) hideLoading();
+    });
+
+    window.addEventListener("load", hideLoading);
+    if (document.readyState === "complete") {
+        hideLoading();
+    }
+})();
+</script>

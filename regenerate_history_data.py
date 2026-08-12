@@ -11,9 +11,15 @@ sys.path.append(str(Path(__file__).parent))
 from services import (
     _query_trading_distribution_from_db,
     _query_trading_volume_distribution_from_db,
+    _query_trading_stat_from_db,
     _query_all_stat_data,
     _build_all_stat_trend_df,
+    build_deposit_speed_history_payload,
+    build_first_deposit_history_payload,
     clear_all_stat_history_cache,
+    clear_year_stat_history_cache,
+    clear_deposit_speed_history_cache,
+    clear_first_deposit_history_cache,
     clear_volume_distribution_source_cache,
     get_activated_login_codes,
     get_all_persona_data,
@@ -78,6 +84,96 @@ def regenerate_all_stat(start_year=2015, end_year=2025):
     if checkpoint_path.exists():
         checkpoint_path.unlink()
     clear_all_stat_history_cache()
+    print(f"完成！保存至: {output_path}")
+
+
+def regenerate_year_stat(start_year=2015, end_year=2025):
+    print(f"正在生成月交易人数 JSON ({start_year}-{end_year})...")
+    output_path = DATA_DIR / "year_stat_2015_2025.json"
+    checkpoint_path = output_path.with_suffix(".checkpoint.json")
+    all_data = {}
+    completed_years = set()
+
+    if checkpoint_path.exists():
+        with open(checkpoint_path, "r", encoding="utf-8") as f:
+            checkpoint = json.load(f)
+        if checkpoint.get("start_year") == start_year and checkpoint.get("end_year") == end_year:
+            all_data = checkpoint.get("data", {})
+            completed_years = {int(year) for year in checkpoint.get("completed_years", [])}
+            print(f"  发现检查点，已完成年份: {sorted(completed_years)}")
+
+    for year in range(start_year, end_year + 1):
+        if year in completed_years:
+            continue
+        print(f"  查询年份: {year}")
+        df = _query_trading_stat_from_db(year)
+        if df.empty:
+            raise RuntimeError(f"{year} 月交易人数缓存为空")
+        if len(df[df["年月"] != "全年"]) != 12:
+            raise RuntimeError(f"{year} 月交易人数缓存不完整：应有 12 个月")
+        all_data[str(year)] = df.to_dict(orient="records")
+        completed_years.add(year)
+
+        checkpoint_temp = checkpoint_path.with_suffix(".json.tmp")
+        with open(checkpoint_temp, "w", encoding="utf-8", newline="\n") as f:
+            json.dump({
+                "start_year": start_year,
+                "end_year": end_year,
+                "completed_years": sorted(completed_years),
+                "data": all_data,
+            }, f, ensure_ascii=False, indent=2)
+        os.replace(checkpoint_temp, checkpoint_path)
+        print(f"  {year} 年完成，检查点已保存")
+
+    temp_path = output_path.with_suffix(".json.tmp")
+    with open(temp_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump({
+            "meta": {
+                "logic": "year_stat_v1",
+                "start_year": start_year,
+                "end_year": end_year,
+                "generated_at": datetime.now().isoformat(timespec="seconds"),
+            },
+            "data": all_data,
+        }, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, output_path)
+    if checkpoint_path.exists():
+        checkpoint_path.unlink()
+    clear_year_stat_history_cache()
+    print(f"完成！保存至: {output_path}")
+
+
+def regenerate_deposit_speed(start_year=2015, end_year=2025):
+    print(f"正在生成入金速度分布 JSON ({start_year}-{end_year})...")
+    output_path = DATA_DIR / "deposit_speed_2015_2025.json"
+    payload = build_deposit_speed_history_payload(start_year, end_year)
+    expected_months = (end_year - start_year + 1) * 12
+    if len(payload.get("data", {})) != expected_months:
+        raise RuntimeError(
+            f"入金速度缓存月份数不正确：期望 {expected_months}，实际 {len(payload.get('data', {}))}"
+        )
+    temp_path = output_path.with_suffix(".json.tmp")
+    with open(temp_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, output_path)
+    clear_deposit_speed_history_cache()
+    print(f"完成！保存至: {output_path}")
+
+
+def regenerate_first_deposit_stat(start_year=2015, end_year=2025):
+    print(f"正在生成首入金统计 JSON ({start_year}-{end_year})...")
+    output_path = DATA_DIR / "first_deposit_stat_2015_2025.json"
+    payload = build_first_deposit_history_payload(start_year, end_year)
+    expected_years = end_year - start_year + 1
+    if len(payload.get("data", {})) != expected_years:
+        raise RuntimeError(
+            f"首入金缓存年份数不正确：期望 {expected_years}，实际 {len(payload.get('data', {}))}"
+        )
+    temp_path = output_path.with_suffix(".json.tmp")
+    with open(temp_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, output_path)
+    clear_first_deposit_history_cache()
     print(f"完成！保存至: {output_path}")
 
 
@@ -264,6 +360,9 @@ if __name__ == "__main__":
     
     try:
         regenerate_all_stat()
+        regenerate_year_stat()
+        regenerate_deposit_speed()
+        regenerate_first_deposit_stat()
         regenerate_trading_distribution()
         regenerate_user_persona()
         regenerate_volume_distribution()

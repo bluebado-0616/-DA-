@@ -24,6 +24,9 @@ year_stat_semaphore = threading.BoundedSemaphore(2)
 # 接口六：用户画像
 user_persona_semaphore = threading.BoundedSemaphore(1)
 
+# 接口八：入金速度分析
+deposit_speed_semaphore = threading.BoundedSemaphore(2)
+
 # ====================== 全局锁 ======================
 _cache_lock = threading.Lock()
 

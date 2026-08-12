@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口八：入金速度分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        body { font-family: system-ui, "Microsoft YaHei", sans-serif; background:#f4f7f6; margin:0; padding:20px; display:flex; flex-direction:column; align-items:center; }
+        .container { width:100%; max-width:960px; background:white; padding:24px; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.08); overflow-x:auto; box-sizing:border-box; }
+        h2 { color:#333; text-align:center; margin-bottom:0.5rem; }
+        .filter { color:#555; text-align:center; margin-bottom:1rem; font-size:0.95rem; }
+        .controls { margin:16px 0; }
+        .mode-tabs { display:flex; justify-content:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+        .mode-tabs label { padding:6px 12px; border:1px solid #ccd4dc; border-radius:16px; cursor:pointer; background:#f8fafb; }
+        .mode-tabs input { margin-right:4px; }
+        .mode-panel { display:none; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; }
+        .mode-panel.active { display:flex; }
+        .controls input, .controls select, .controls button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; }
+        .controls button { background:#0066cc; border-color:#0066cc; color:white; cursor:pointer; }
+        .stats { display:flex; justify-content:center; margin-bottom:12px; }
+        .stat-card { background:#f8fafc; border-top:4px solid #0066cc; border-radius:8px; padding:14px 22px; min-width:160px; text-align:center; }
+        .stat-label { color:#68717a; font-size:13px; }
+        .stat-value { margin-top:6px; font-size:22px; font-weight:700; }
+        .chart-panel { margin:18px 0 24px; border:1px solid #edf0f2; border-radius:8px; padding:12px; }
+        #speedChart { width:100%; height:420px; }
+        .stat-table { width:100%; border-collapse:collapse; font-size:15px; }
+        .stat-table th { background:#0066cc; color:white; padding:12px; text-align:center; white-space:nowrap; }
+        .stat-table td { padding:10px; text-align:center; border-bottom:1px solid #e0e0e0; color:#444; }
+        .stat-table tr:hover { background:#f8f9fa; }
+        .note { margin-top:1rem; color:#555; font-size:0.9rem; text-align:center; line-height:1.5; }
+    </style>
+</head>
+<body>
+    {% include "_loading_overlay.html" %}
+    <div class="container">
+        <h2>接口八：入金速度分析</h2>
+        <div class="filter">所选时间段：{{ date_label }}</div>
+        <div class="controls">
+            <form method="get" action="/pyapi/deposit/speed" id="speedForm">
+                <div class="mode-tabs">
+                    <label><input type="radio" name="mode" value="year" {% if mode == 'year' %}checked{% endif %}>按年</label>
+                    <label><input type="radio" name="mode" value="month" {% if mode == 'month' %}checked{% endif %}>按月</label>
+                    <label><input type="radio" name="mode" value="range" {% if mode == 'range' %}checked{% endif %}>年月范围</label>
+                </div>
+
+                <div class="mode-tabs" style="margin-bottom:16px;">
+                    <label><input type="radio" name="referred" value="all" {% if referred != 'exclude' %}checked{% endif %}>包含被推荐人（全部人）</label>
+                    <label><input type="radio" name="referred" value="exclude" {% if referred == 'exclude' %}checked{% endif %}>不包含被推荐人</label>
+                </div>
+
+                <div class="mode-panel {% if mode == 'year' %}active{% endif %}" data-mode="year">
+                    <label>年份：
+                        <input type="number" name="year" value="{{ year }}" min="2015" max="2035">
+                    </label>
+                    <button type="submit">查询</button>
+                </div>
+
+                <div class="mode-panel {% if mode == 'month' %}active{% endif %}" data-mode="month">
+                    <label>年份：
+                        <input type="number" name="year" value="{{ year }}" min="2015" max="2035">
+                    </label>
+                    <label>月份：
+                        <select name="month">
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}月</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">查询</button>
+                </div>
+
+                <div class="mode-panel {% if mode == 'range' %}active{% endif %}" data-mode="range">
+                    <label>开始：
+                        <input type="number" name="start_year" value="{{ start_year }}" min="2015" max="2035" style="width:90px">
+                        <select name="start_month">
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if start_month == m %}selected{% endif %}>{{ m }}月</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <span>至</span>
+                    <label>结束：
+                        <input type="number" name="end_year" value="{{ end_year }}" min="2015" max="2035" style="width:90px">
+                        <select name="end_month">
+                            {% for m in range(1, 13) %}
+                            <option value="{{ m }}" {% if end_month == m %}selected{% endif %}>{{ m }}月</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button type="submit">查询</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-label">合计人数</div>
+                <div class="stat-value">{{ total_users }}</div>
+            </div>
+        </div>
+
+        <div class="chart-panel">
+            <div id="speedChart"></div>
+        </div>
+        {{ table_html | safe }}
+        <div class="note">
+            入金速度 = 首次成功入金时间（js_bank_notify.iPayResult=1 的最早 sTradeTime）− 最早注册时间（js_mt4_account.reg_time）。入金速度 = 首次成功入金时间 − 最早注册时间（换算成小时）。<br>
+            按钮是按注册时间筛选；六位辨识码关联；排除测试组（99 / G99 / MANAGER）。<br>
+            按钮筛选的年月是按照伦敦金交易日以及冬夏令时的逻辑来的。<br>
+            「不包含被推荐人」= 所选时段样本人数 −（样本 ∩ 历史上曾出现在推荐表的账户）。
+        </div>
+    </div>
+    <script>
+        const form = document.getElementById("speedForm");
+        const panels = Array.from(document.querySelectorAll(".mode-panel"));
+        function syncMode() {
+            const mode = (form.querySelector('input[name="mode"]:checked') || {}).value || "year";
+            panels.forEach(panel => {
+                const active = panel.dataset.mode === mode;
+                panel.classList.toggle("active", active);
+                panel.querySelectorAll("input, select, button").forEach(el => {
+                    el.disabled = !active;
+                });
+            });
+            // year 输入在 year/month 模式各有一份，避免重复提交
+            const yearInputs = form.querySelectorAll('input[name="year"]');
+            yearInputs.forEach(input => {
+                const panel = input.closest(".mode-panel");
+                if (panel) input.disabled = panel.dataset.mode !== mode;
+            });
+        }
+        form.querySelectorAll('input[name="mode"]').forEach(radio => {
+            radio.addEventListener("change", syncMode);
+        });
+        syncMode();
+
+        const chartData = {{ chart_data | safe }};
+        const chart = echarts.init(document.getElementById("speedChart"));
+        chart.setOption({
+            title: { text: "入金速度分布", left: "center" },
+            tooltip: { trigger: "axis" },
+            grid: { left: 55, right: 25, top: 60, bottom: 90 },
+            xAxis: {
+                type: "category",
+                data: chartData.map(row => row["入金速度分布"]),
+                axisLabel: { rotate: 45, interval: 10 },
+            },
+            yAxis: { type: "value", name: "人数", splitLine: { lineStyle: { type: "dashed" } } },
+            series: [{
+                name: "人数",
+                type: "bar",
+                data: chartData.map(row => row["人数"]),
+                itemStyle: { color: "#0066cc" },
+                barMaxWidth: 28,
+            }],
+        });
+        window.addEventListener("resize", () => chart.resize());
+    </script>
+</body>
+</html>

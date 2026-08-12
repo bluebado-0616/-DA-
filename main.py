@@ -16,6 +16,7 @@ from utils import (
     year_stat_semaphore,
     daily_stat_semaphore,
     user_persona_semaphore,
+    deposit_speed_semaphore,
     cache_load_df,
     cache_save_df,
     _cache_lock
@@ -94,7 +95,8 @@ def daily_stat_html(
         if start_d > end_d: start_d, end_d = end_d, start_d
 
     date_label = f"{start_d} 至 {end_d}"
-    cache_payload = {"start": start_d.isoformat(), "end": end_d.isoformat(), "logic": "daily_stat_v1"}
+    # v2：按交易日统计，并排除交易日为周六、周日的展示数据。
+    cache_payload = {"start": start_d.isoformat(), "end": end_d.isoformat(), "logic": "daily_stat_v2_weekdays"}
 
     if not daily_stat_semaphore.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="日统计计算中，请稍后重试")
@@ -138,12 +140,25 @@ def daily_stat_html(
 @app.get("/pyapi/year/stat", response_class=HTMLResponse, summary="月交易人数")
 def trading_stat_html(
     request: Request,
-    year: Optional[int] = Query(None, ge=2000, le=2035, description="统计年份")
+    year: Optional[str] = Query(None, description="统计年份，默认当前年份"),
 ):
+    today = date.today()
     if year is None:
-        year = datetime.today().year
+        selected_year = today.year
+    else:
+        text = str(year).strip()
+        if not text or text.lower() in {"undefined", "null", "none"}:
+            selected_year = today.year
+        else:
+            try:
+                selected_year = max(2000, min(2035, int(text)))
+            except (TypeError, ValueError):
+                selected_year = today.year
+    date_label = f"{selected_year}年"
 
-    cache_payload = {"year": int(year), "logic": "year_stat_v1"}
+    # v5: 清除旧 2026 临时缓存，强制按当前激活口径重算
+    cache_payload = {"year": int(selected_year), "logic": "year_stat_v5"}
+    df = None
 
     if not year_stat_semaphore.acquire(blocking=False):
         raise HTTPException(status_code=429, detail="年度统计计算中，请稍后重试")
@@ -153,23 +168,26 @@ def trading_stat_html(
             df = cache_load_df("year_stat", cache_payload, cache_subdir="year_stat")
 
         if df is None or df.empty:
-            df = services.query_trading_stat_df(year)
+            df = services.query_trading_stat_df(selected_year)
             with _cache_lock:
                 cache_save_df("year_stat", cache_payload, df, ttl_seconds=3600 * 12, cache_subdir="year_stat")
     finally:
         year_stat_semaphore.release()
 
-    if df.empty:
-        table_html = "<h2>暂无数据</h2>"
+    if df is None or df.empty:
+        table_html = "<p>暂无数据</p>"
+        chart_data = []
     else:
         table_html = df.to_html(index=False, classes='stat-table', float_format='%.0f')
         table_html = table_html.replace('<tr>\n    <td>全年</td>', '<tr style="font-weight:bold; background-color:#e6f3ff;">\n    <td>全年</td>')
+        chart_data = df.to_dict(orient="records")
 
     return templates.TemplateResponse("year_stat.html", {
         "request": request,
-        "year": year,
+        "year": selected_year,
+        "date_label": date_label,
         "table_html": table_html,
-        "chart_data": df.to_json(orient="records", force_ascii=False) if not df.empty else "[]",
+        "chart_data": chart_data,
     })
 
 
@@ -347,3 +365,155 @@ def first_deposit_stat_html(
         })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+# ========== 接口八：入金速度分析（HTML + 缓存 + 并发保护） ==========
+def _clamp_month(year: int, month: int) -> date:
+    year = max(2015, min(2035, int(year)))
+    month = max(1, min(12, int(month)))
+    return date(year, month, 1)
+
+
+def _resolve_deposit_speed_period(
+    mode: Optional[str],
+    year: Optional[int],
+    month: Optional[int],
+    start_year: Optional[int],
+    start_month: Optional[int],
+    end_year: Optional[int],
+    end_month: Optional[int],
+) -> tuple[str, date, date, str]:
+    """解析年/月/范围筛选，返回 (mode, start_date, end_date, date_label)。"""
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    mode_text = (mode or "year").strip().lower()
+    if mode_text not in {"year", "month", "range"}:
+        mode_text = "year"
+
+    if mode_text == "month":
+        ym = _clamp_month(year or yesterday.year, month or yesterday.month)
+        start_d = ym
+        end_d = services._month_end(ym)
+        if end_d > yesterday:
+            end_d = yesterday
+        if start_d > end_d:
+            end_d = start_d
+        label = f"{ym.year}年{ym.month:02d}月"
+        return mode_text, start_d, end_d, label
+
+    if mode_text == "range":
+        start_ym = _clamp_month(
+            start_year or (year or yesterday.year),
+            start_month or 1,
+        )
+        end_ym = _clamp_month(
+            end_year or (year or yesterday.year),
+            end_month or yesterday.month,
+        )
+        if start_ym > end_ym:
+            start_ym, end_ym = end_ym, start_ym
+        start_d = start_ym
+        end_d = services._month_end(end_ym)
+        if end_d > yesterday:
+            end_d = yesterday
+        if start_d > end_d:
+            end_d = start_d
+        label = f"{start_ym.year}-{start_ym.month:02d} 至 {end_ym.year}-{end_ym.month:02d}"
+        return mode_text, start_d, end_d, label
+
+    # year
+    selected_year = max(2015, min(2035, int(year or yesterday.year)))
+    start_d = date(selected_year, 1, 1)
+    end_d = date(selected_year, 12, 31)
+    if selected_year == yesterday.year:
+        end_d = yesterday
+    if start_d > end_d:
+        end_d = start_d
+    return "year", start_d, end_d, f"{selected_year}年"
+
+
+@app.get("/pyapi/deposit/speed", response_class=HTMLResponse, summary="入金速度分析")
+def deposit_speed_html(
+    request: Request,
+    mode: Optional[str] = Query("year", description="year / month / range"),
+    year: Optional[int] = Query(None, ge=2015, le=2035),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    start_year: Optional[int] = Query(None, ge=2015, le=2035),
+    start_month: Optional[int] = Query(None, ge=1, le=12),
+    end_year: Optional[int] = Query(None, ge=2015, le=2035),
+    end_month: Optional[int] = Query(None, ge=1, le=12),
+    referred: Optional[str] = Query(
+        "all",
+        description="all=包含被推荐人（全部人）；exclude=不包含被推荐人",
+    ),
+):
+    mode_text, start_d, end_d, date_label = _resolve_deposit_speed_period(
+        mode, year, month, start_year, start_month, end_year, end_month
+    )
+    referred_mode = services._normalize_deposit_speed_referred_mode(referred)
+    uses_live = end_d >= date(2026, 1, 1)
+    cache_payload = {
+        "mode": mode_text,
+        "start": start_d.isoformat(),
+        "end": end_d.isoformat(),
+        "referred": referred_mode,
+        "logic": "deposit_speed_v4_referred_toggle",
+    }
+
+    if not deposit_speed_semaphore.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="入金速度分析计算中，请稍后重试")
+
+    try:
+        df = None
+        # 纯历史（<=2025）直接读 JSON 汇总，不走临时缓存；含 2026 时用磁盘临时缓存
+        if uses_live:
+            with _cache_lock:
+                df = cache_load_df("deposit_speed", cache_payload, cache_subdir="deposit_speed")
+        if df is None or df.empty:
+            df = services.query_deposit_speed_df(
+                start_d, end_d, referred_mode=referred_mode
+            )
+            if uses_live:
+                with _cache_lock:
+                    cache_save_df(
+                        "deposit_speed",
+                        cache_payload,
+                        df,
+                        ttl_seconds=3600 * 6,
+                        cache_subdir="deposit_speed",
+                    )
+    finally:
+        deposit_speed_semaphore.release()
+
+    if df is None or df.empty:
+        table_html = "<p>暂无数据</p>"
+        chart_data = "[]"
+        total_users = 0
+    else:
+        display_df = services._enrich_deposit_speed_share_columns(df)
+        table_html = display_df.to_html(index=False, classes="stat-table")
+        table_html = table_html.replace(
+            "<tr>\n    <td>合计</td>",
+            '<tr style="font-weight:bold; background-color:#e6f3ff;">\n    <td>合计</td>',
+        )
+        chart_df = display_df[display_df["入金速度分布"] != "合计"]
+        chart_data = chart_df.to_json(orient="records", force_ascii=False)
+        total_row = display_df[display_df["入金速度分布"] == "合计"]
+        total_users = int(total_row["人数"].iloc[0]) if not total_row.empty else 0
+
+    return templates.TemplateResponse("deposit_speed.html", {
+        "request": request,
+        "mode": mode_text,
+        "year": start_d.year if mode_text != "range" else (year or start_d.year),
+        "month": start_d.month if mode_text == "month" else (month or start_d.month),
+        "start_year": start_d.year,
+        "start_month": start_d.month,
+        "end_year": end_d.year,
+        "end_month": end_d.month,
+        "referred": referred_mode,
+        "date_label": date_label,
+        "table_html": table_html,
+        "chart_data": chart_data,
+        "total_users": total_users,
+        "uses_live": uses_live,
+    })

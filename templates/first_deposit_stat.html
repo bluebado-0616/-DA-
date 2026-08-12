@@ -33,6 +33,7 @@
     </style>
 </head>
 <body>
+{% include "_loading_overlay.html" %}
 <main class="container">
     <h2>首入金统计</h2>
     <div class="subtitle">{{ year }} 年月度首入金及转化趋势</div>
@@ -50,11 +51,11 @@
         <div class="stat-card"><div class="stat-label">年度首入金数</div><div class="stat-value">{{ result.year_num }}</div></div>
         <div class="stat-card"><div class="stat-label">年度真实开户数</div><div class="stat-value">{{ result.year_real_num }}</div></div>
         <div class="stat-card"><div class="stat-label">开户转化率</div><div class="stat-value">{{ result.year_rate }}</div></div>
-        <div class="stat-card"><div class="stat-label">当月被推荐用户首入金数</div><div class="stat-value">{{ result.year_tjynum }}</div></div>
-        <div class="stat-card"><div class="stat-label">被推荐用户首入金占比</div><div class="stat-value">{{ result.year_tjyrate }}</div></div>
+        <div class="stat-card"><div class="stat-label">当年首入金中曾被推荐人数</div><div class="stat-value">{{ result.year_tjynum }}</div></div>
+        <div class="stat-card"><div class="stat-label">曾被推荐用户首入金占比</div><div class="stat-value">{{ result.year_tjyrate }}</div></div>
     </section>
 
-    <div class="note">时间按伦敦金交易日计算：夏令时 05:00、冬令时 06:00 切换交易日。</div>
+    <div class="note">时间按伦敦金交易日计算：夏令时 05:00、冬令时 06:00 切换交易日。被推荐口径为历史上曾出现在推荐表中（不要求推荐发生在首入金当月）。</div>
 
     <section class="chart-grid">
         <div class="panel"><h3>月度人数趋势</h3><div id="countChart" class="chart"></div></div>
@@ -70,8 +71,8 @@
                     <th>首入金数</th>
                     <th>真实开户数</th>
                     <th>开户转化率</th>
-                    <th>当月被推荐用户首入金数</th>
-                    <th>被推荐用户首入金占比</th>
+                    <th>当月首入金中曾被推荐人数</th>
+                    <th>曾被推荐用户首入金占比</th>
                 </tr>
             </thead>
             <tbody>
@@ -86,6 +87,16 @@
                 </tr>
                 {% endfor %}
             </tbody>
+            <tfoot>
+                <tr style="font-weight:700; background:#f0f4f8;">
+                    <td>合计</td>
+                    <td>{{ result.year_num }}</td>
+                    <td>{{ result.year_real_num }}</td>
+                    <td>-</td>
+                    <td>{{ result.year_tjynum }}</td>
+                    <td>-</td>
+                </tr>
+            </tfoot>
         </table>
     </section>
 </main>
@@ -107,7 +118,7 @@
         series: [
             { name:"首入金数", type:"line", smooth:true, data:chartData.map(row => row.num) },
             { name:"真实开户数", type:"line", smooth:true, data:chartData.map(row => row.real_num) },
-            { name:"当月被推荐用户首入金数", type:"line", smooth:true, data:chartData.map(row => row.tjy_num) },
+            { name:"当月首入金中曾被推荐人数", type:"line", smooth:true, data:chartData.map(row => row.tjy_num) },
         ],
     });
 
@@ -117,7 +128,7 @@
         yAxis: { type:"value", name:"百分比", axisLabel:{ formatter:"{value}%" }, splitLine:{ lineStyle:{ type:"dashed" } } },
         series: [
             { name:"开户转化率", type:"line", smooth:true, data:chartData.map(row => parseFloat(row.rate)) },
-            { name:"被推荐用户首入金占比", type:"line", smooth:true, data:chartData.map(row => parseFloat(row.tyr_rate)) },
+            { name:"曾被推荐用户首入金占比", type:"line", smooth:true, data:chartData.map(row => parseFloat(row.tyr_rate)) },
         ],
     });
 

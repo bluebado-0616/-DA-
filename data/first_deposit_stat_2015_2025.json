@@ -1,0 +1,1310 @@
+{
+  "meta": {
+    "logic": "first_deposit_stat_v2_ever_referred",
+    "start_year": 2015,
+    "end_year": 2025,
+    "calendar": "london_gold_trading_day",
+    "referral": "lifetime_ever_referred",
+    "generated_at": "2026-08-12T10:37:03"
+  },
+  "data": {
+    "2015": {
+      "year": 2015,
+      "list": [
+        {
+          "date": "2015-01-01",
+          "date1": "2015/01",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-02-01",
+          "date1": "2015/02",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-03-01",
+          "date1": "2015/03",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-04-01",
+          "date1": "2015/04",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-05-01",
+          "date1": "2015/05",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-06-01",
+          "date1": "2015/06",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-07-01",
+          "date1": "2015/07",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-08-01",
+          "date1": "2015/08",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-09-01",
+          "date1": "2015/09",
+          "num": 0,
+          "real_num": 0,
+          "rate": "0.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-10-01",
+          "date1": "2015/10",
+          "num": 3,
+          "real_num": 24,
+          "rate": "12.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-11-01",
+          "date1": "2015/11",
+          "num": 61,
+          "real_num": 104,
+          "rate": "58.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2015-12-01",
+          "date1": "2015/12",
+          "num": 100,
+          "real_num": 737,
+          "rate": "13.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        }
+      ],
+      "year_num": 164,
+      "year_real_num": 865,
+      "year_tjynum": 0,
+      "year_rate": "19.0%",
+      "year_tjyrate": "0.0%"
+    },
+    "2016": {
+      "year": 2016,
+      "list": [
+        {
+          "date": "2016-01-01",
+          "date1": "2016/01",
+          "num": 143,
+          "real_num": 1043,
+          "rate": "13.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-02-01",
+          "date1": "2016/02",
+          "num": 10,
+          "real_num": 51,
+          "rate": "19.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-03-01",
+          "date1": "2016/03",
+          "num": 575,
+          "real_num": 620,
+          "rate": "92.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-04-01",
+          "date1": "2016/04",
+          "num": 217,
+          "real_num": 315,
+          "rate": "68.9%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-05-01",
+          "date1": "2016/05",
+          "num": 83,
+          "real_num": 263,
+          "rate": "31.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-06-01",
+          "date1": "2016/06",
+          "num": 64,
+          "real_num": 641,
+          "rate": "10.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-07-01",
+          "date1": "2016/07",
+          "num": 65,
+          "real_num": 440,
+          "rate": "14.8%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-08-01",
+          "date1": "2016/08",
+          "num": 231,
+          "real_num": 442,
+          "rate": "52.3%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-09-01",
+          "date1": "2016/09",
+          "num": 213,
+          "real_num": 333,
+          "rate": "64.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-10-01",
+          "date1": "2016/10",
+          "num": 164,
+          "real_num": 243,
+          "rate": "67.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-11-01",
+          "date1": "2016/11",
+          "num": 189,
+          "real_num": 388,
+          "rate": "48.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2016-12-01",
+          "date1": "2016/12",
+          "num": 241,
+          "real_num": 513,
+          "rate": "47.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        }
+      ],
+      "year_num": 2195,
+      "year_real_num": 5292,
+      "year_tjynum": 0,
+      "year_rate": "41.5%",
+      "year_tjyrate": "0.0%"
+    },
+    "2017": {
+      "year": 2017,
+      "list": [
+        {
+          "date": "2017-01-01",
+          "date1": "2017/01",
+          "num": 59,
+          "real_num": 1698,
+          "rate": "3.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-02-01",
+          "date1": "2017/02",
+          "num": 85,
+          "real_num": 267,
+          "rate": "31.8%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-03-01",
+          "date1": "2017/03",
+          "num": 195,
+          "real_num": 565,
+          "rate": "34.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-04-01",
+          "date1": "2017/04",
+          "num": 134,
+          "real_num": 603,
+          "rate": "22.2%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-05-01",
+          "date1": "2017/05",
+          "num": 114,
+          "real_num": 1136,
+          "rate": "10.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-06-01",
+          "date1": "2017/06",
+          "num": 90,
+          "real_num": 1044,
+          "rate": "8.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-07-01",
+          "date1": "2017/07",
+          "num": 183,
+          "real_num": 1586,
+          "rate": "11.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-08-01",
+          "date1": "2017/08",
+          "num": 283,
+          "real_num": 2734,
+          "rate": "10.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-09-01",
+          "date1": "2017/09",
+          "num": 267,
+          "real_num": 2685,
+          "rate": "9.9%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-10-01",
+          "date1": "2017/10",
+          "num": 252,
+          "real_num": 3193,
+          "rate": "7.9%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-11-01",
+          "date1": "2017/11",
+          "num": 267,
+          "real_num": 2631,
+          "rate": "10.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2017-12-01",
+          "date1": "2017/12",
+          "num": 252,
+          "real_num": 2765,
+          "rate": "9.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        }
+      ],
+      "year_num": 2181,
+      "year_real_num": 20907,
+      "year_tjynum": 0,
+      "year_rate": "10.4%",
+      "year_tjyrate": "0.0%"
+    },
+    "2018": {
+      "year": 2018,
+      "list": [
+        {
+          "date": "2018-01-01",
+          "date1": "2018/01",
+          "num": 282,
+          "real_num": 2539,
+          "rate": "11.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-02-01",
+          "date1": "2018/02",
+          "num": 255,
+          "real_num": 2530,
+          "rate": "10.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-03-01",
+          "date1": "2018/03",
+          "num": 259,
+          "real_num": 1677,
+          "rate": "15.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-04-01",
+          "date1": "2018/04",
+          "num": 203,
+          "real_num": 1240,
+          "rate": "16.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-05-01",
+          "date1": "2018/05",
+          "num": 208,
+          "real_num": 1702,
+          "rate": "12.2%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-06-01",
+          "date1": "2018/06",
+          "num": 116,
+          "real_num": 1692,
+          "rate": "6.9%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-07-01",
+          "date1": "2018/07",
+          "num": 135,
+          "real_num": 2547,
+          "rate": "5.3%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-08-01",
+          "date1": "2018/08",
+          "num": 149,
+          "real_num": 1818,
+          "rate": "8.2%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-09-01",
+          "date1": "2018/09",
+          "num": 182,
+          "real_num": 1942,
+          "rate": "9.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-10-01",
+          "date1": "2018/10",
+          "num": 355,
+          "real_num": 2544,
+          "rate": "14.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-11-01",
+          "date1": "2018/11",
+          "num": 224,
+          "real_num": 2015,
+          "rate": "11.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2018-12-01",
+          "date1": "2018/12",
+          "num": 205,
+          "real_num": 1872,
+          "rate": "11.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        }
+      ],
+      "year_num": 2573,
+      "year_real_num": 24118,
+      "year_tjynum": 0,
+      "year_rate": "10.7%",
+      "year_tjyrate": "0.0%"
+    },
+    "2019": {
+      "year": 2019,
+      "list": [
+        {
+          "date": "2019-01-01",
+          "date1": "2019/01",
+          "num": 206,
+          "real_num": 1575,
+          "rate": "13.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-02-01",
+          "date1": "2019/02",
+          "num": 152,
+          "real_num": 867,
+          "rate": "17.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-03-01",
+          "date1": "2019/03",
+          "num": 88,
+          "real_num": 289,
+          "rate": "30.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-04-01",
+          "date1": "2019/04",
+          "num": 61,
+          "real_num": 328,
+          "rate": "18.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-05-01",
+          "date1": "2019/05",
+          "num": 80,
+          "real_num": 698,
+          "rate": "11.5%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-06-01",
+          "date1": "2019/06",
+          "num": 101,
+          "real_num": 617,
+          "rate": "16.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-07-01",
+          "date1": "2019/07",
+          "num": 64,
+          "real_num": 443,
+          "rate": "14.4%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-08-01",
+          "date1": "2019/08",
+          "num": 97,
+          "real_num": 490,
+          "rate": "19.8%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-09-01",
+          "date1": "2019/09",
+          "num": 96,
+          "real_num": 676,
+          "rate": "14.2%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-10-01",
+          "date1": "2019/10",
+          "num": 119,
+          "real_num": 832,
+          "rate": "14.3%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-11-01",
+          "date1": "2019/11",
+          "num": 139,
+          "real_num": 1076,
+          "rate": "12.9%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2019-12-01",
+          "date1": "2019/12",
+          "num": 330,
+          "real_num": 1686,
+          "rate": "19.6%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        }
+      ],
+      "year_num": 1533,
+      "year_real_num": 9577,
+      "year_tjynum": 0,
+      "year_rate": "16.0%",
+      "year_tjyrate": "0.0%"
+    },
+    "2020": {
+      "year": 2020,
+      "list": [
+        {
+          "date": "2020-01-01",
+          "date1": "2020/01",
+          "num": 290,
+          "real_num": 1701,
+          "rate": "17.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-02-01",
+          "date1": "2020/02",
+          "num": 310,
+          "real_num": 2211,
+          "rate": "14.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-03-01",
+          "date1": "2020/03",
+          "num": 461,
+          "real_num": 3113,
+          "rate": "14.8%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-04-01",
+          "date1": "2020/04",
+          "num": 355,
+          "real_num": 2349,
+          "rate": "15.1%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-05-01",
+          "date1": "2020/05",
+          "num": 390,
+          "real_num": 2172,
+          "rate": "18.0%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-06-01",
+          "date1": "2020/06",
+          "num": 292,
+          "real_num": 1978,
+          "rate": "14.8%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-07-01",
+          "date1": "2020/07",
+          "num": 400,
+          "real_num": 2617,
+          "rate": "15.3%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-08-01",
+          "date1": "2020/08",
+          "num": 420,
+          "real_num": 3166,
+          "rate": "13.3%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-09-01",
+          "date1": "2020/09",
+          "num": 243,
+          "real_num": 1771,
+          "rate": "13.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-10-01",
+          "date1": "2020/10",
+          "num": 161,
+          "real_num": 1658,
+          "rate": "9.7%",
+          "tjy_num": 0,
+          "tyr_rate": "0.0%"
+        },
+        {
+          "date": "2020-11-01",
+          "date1": "2020/11",
+          "num": 211,
+          "real_num": 1614,
+          "rate": "13.1%",
+          "tjy_num": 8,
+          "tyr_rate": "3.8%"
+        },
+        {
+          "date": "2020-12-01",
+          "date1": "2020/12",
+          "num": 232,
+          "real_num": 1736,
+          "rate": "13.4%",
+          "tjy_num": 22,
+          "tyr_rate": "9.5%"
+        }
+      ],
+      "year_num": 3765,
+      "year_real_num": 26086,
+      "year_tjynum": 30,
+      "year_rate": "14.4%",
+      "year_tjyrate": "0.8%"
+    },
+    "2021": {
+      "year": 2021,
+      "list": [
+        {
+          "date": "2021-01-01",
+          "date1": "2021/01",
+          "num": 235,
+          "real_num": 1904,
+          "rate": "12.3%",
+          "tjy_num": 22,
+          "tyr_rate": "9.4%"
+        },
+        {
+          "date": "2021-02-01",
+          "date1": "2021/02",
+          "num": 171,
+          "real_num": 1175,
+          "rate": "14.6%",
+          "tjy_num": 19,
+          "tyr_rate": "11.1%"
+        },
+        {
+          "date": "2021-03-01",
+          "date1": "2021/03",
+          "num": 279,
+          "real_num": 1656,
+          "rate": "16.8%",
+          "tjy_num": 38,
+          "tyr_rate": "13.6%"
+        },
+        {
+          "date": "2021-04-01",
+          "date1": "2021/04",
+          "num": 258,
+          "real_num": 1821,
+          "rate": "14.2%",
+          "tjy_num": 22,
+          "tyr_rate": "8.5%"
+        },
+        {
+          "date": "2021-05-01",
+          "date1": "2021/05",
+          "num": 397,
+          "real_num": 2309,
+          "rate": "17.2%",
+          "tjy_num": 20,
+          "tyr_rate": "5.0%"
+        },
+        {
+          "date": "2021-06-01",
+          "date1": "2021/06",
+          "num": 399,
+          "real_num": 2578,
+          "rate": "15.5%",
+          "tjy_num": 30,
+          "tyr_rate": "7.5%"
+        },
+        {
+          "date": "2021-07-01",
+          "date1": "2021/07",
+          "num": 427,
+          "real_num": 2270,
+          "rate": "18.8%",
+          "tjy_num": 53,
+          "tyr_rate": "12.4%"
+        },
+        {
+          "date": "2021-08-01",
+          "date1": "2021/08",
+          "num": 456,
+          "real_num": 2112,
+          "rate": "21.6%",
+          "tjy_num": 37,
+          "tyr_rate": "8.1%"
+        },
+        {
+          "date": "2021-09-01",
+          "date1": "2021/09",
+          "num": 394,
+          "real_num": 2016,
+          "rate": "19.5%",
+          "tjy_num": 31,
+          "tyr_rate": "7.9%"
+        },
+        {
+          "date": "2021-10-01",
+          "date1": "2021/10",
+          "num": 295,
+          "real_num": 1764,
+          "rate": "16.7%",
+          "tjy_num": 34,
+          "tyr_rate": "11.5%"
+        },
+        {
+          "date": "2021-11-01",
+          "date1": "2021/11",
+          "num": 276,
+          "real_num": 2825,
+          "rate": "9.8%",
+          "tjy_num": 20,
+          "tyr_rate": "7.2%"
+        },
+        {
+          "date": "2021-12-01",
+          "date1": "2021/12",
+          "num": 311,
+          "real_num": 3492,
+          "rate": "8.9%",
+          "tjy_num": 17,
+          "tyr_rate": "5.5%"
+        }
+      ],
+      "year_num": 3898,
+      "year_real_num": 25922,
+      "year_tjynum": 343,
+      "year_rate": "15.0%",
+      "year_tjyrate": "8.8%"
+    },
+    "2022": {
+      "year": 2022,
+      "list": [
+        {
+          "date": "2022-01-01",
+          "date1": "2022/01",
+          "num": 273,
+          "real_num": 2730,
+          "rate": "10.0%",
+          "tjy_num": 20,
+          "tyr_rate": "7.3%"
+        },
+        {
+          "date": "2022-02-01",
+          "date1": "2022/02",
+          "num": 337,
+          "real_num": 2740,
+          "rate": "12.3%",
+          "tjy_num": 21,
+          "tyr_rate": "6.2%"
+        },
+        {
+          "date": "2022-03-01",
+          "date1": "2022/03",
+          "num": 396,
+          "real_num": 2678,
+          "rate": "14.8%",
+          "tjy_num": 32,
+          "tyr_rate": "8.1%"
+        },
+        {
+          "date": "2022-04-01",
+          "date1": "2022/04",
+          "num": 82,
+          "real_num": 885,
+          "rate": "9.3%",
+          "tjy_num": 8,
+          "tyr_rate": "9.8%"
+        },
+        {
+          "date": "2022-05-01",
+          "date1": "2022/05",
+          "num": 115,
+          "real_num": 2727,
+          "rate": "4.2%",
+          "tjy_num": 24,
+          "tyr_rate": "20.9%"
+        },
+        {
+          "date": "2022-06-01",
+          "date1": "2022/06",
+          "num": 93,
+          "real_num": 2217,
+          "rate": "4.2%",
+          "tjy_num": 5,
+          "tyr_rate": "5.4%"
+        },
+        {
+          "date": "2022-07-01",
+          "date1": "2022/07",
+          "num": 113,
+          "real_num": 3055,
+          "rate": "3.7%",
+          "tjy_num": 5,
+          "tyr_rate": "4.4%"
+        },
+        {
+          "date": "2022-08-01",
+          "date1": "2022/08",
+          "num": 193,
+          "real_num": 2876,
+          "rate": "6.7%",
+          "tjy_num": 12,
+          "tyr_rate": "6.2%"
+        },
+        {
+          "date": "2022-09-01",
+          "date1": "2022/09",
+          "num": 205,
+          "real_num": 2152,
+          "rate": "9.5%",
+          "tjy_num": 15,
+          "tyr_rate": "7.3%"
+        },
+        {
+          "date": "2022-10-01",
+          "date1": "2022/10",
+          "num": 181,
+          "real_num": 2224,
+          "rate": "8.1%",
+          "tjy_num": 10,
+          "tyr_rate": "5.5%"
+        },
+        {
+          "date": "2022-11-01",
+          "date1": "2022/11",
+          "num": 139,
+          "real_num": 1988,
+          "rate": "7.0%",
+          "tjy_num": 10,
+          "tyr_rate": "7.2%"
+        },
+        {
+          "date": "2022-12-01",
+          "date1": "2022/12",
+          "num": 96,
+          "real_num": 1599,
+          "rate": "6.0%",
+          "tjy_num": 9,
+          "tyr_rate": "9.4%"
+        }
+      ],
+      "year_num": 2223,
+      "year_real_num": 27871,
+      "year_tjynum": 171,
+      "year_rate": "8.0%",
+      "year_tjyrate": "7.7%"
+    },
+    "2023": {
+      "year": 2023,
+      "list": [
+        {
+          "date": "2023-01-01",
+          "date1": "2023/01",
+          "num": 97,
+          "real_num": 1661,
+          "rate": "5.8%",
+          "tjy_num": 5,
+          "tyr_rate": "5.2%"
+        },
+        {
+          "date": "2023-02-01",
+          "date1": "2023/02",
+          "num": 147,
+          "real_num": 2151,
+          "rate": "6.8%",
+          "tjy_num": 12,
+          "tyr_rate": "8.2%"
+        },
+        {
+          "date": "2023-03-01",
+          "date1": "2023/03",
+          "num": 166,
+          "real_num": 2384,
+          "rate": "7.0%",
+          "tjy_num": 20,
+          "tyr_rate": "12.0%"
+        },
+        {
+          "date": "2023-04-01",
+          "date1": "2023/04",
+          "num": 141,
+          "real_num": 2065,
+          "rate": "6.8%",
+          "tjy_num": 27,
+          "tyr_rate": "19.1%"
+        },
+        {
+          "date": "2023-05-01",
+          "date1": "2023/05",
+          "num": 145,
+          "real_num": 2330,
+          "rate": "6.2%",
+          "tjy_num": 17,
+          "tyr_rate": "11.7%"
+        },
+        {
+          "date": "2023-06-01",
+          "date1": "2023/06",
+          "num": 117,
+          "real_num": 2018,
+          "rate": "5.8%",
+          "tjy_num": 21,
+          "tyr_rate": "17.9%"
+        },
+        {
+          "date": "2023-07-01",
+          "date1": "2023/07",
+          "num": 122,
+          "real_num": 2145,
+          "rate": "5.7%",
+          "tjy_num": 22,
+          "tyr_rate": "18.0%"
+        },
+        {
+          "date": "2023-08-01",
+          "date1": "2023/08",
+          "num": 165,
+          "real_num": 2206,
+          "rate": "7.5%",
+          "tjy_num": 23,
+          "tyr_rate": "13.9%"
+        },
+        {
+          "date": "2023-09-01",
+          "date1": "2023/09",
+          "num": 119,
+          "real_num": 2281,
+          "rate": "5.2%",
+          "tjy_num": 17,
+          "tyr_rate": "14.3%"
+        },
+        {
+          "date": "2023-10-01",
+          "date1": "2023/10",
+          "num": 168,
+          "real_num": 2250,
+          "rate": "7.5%",
+          "tjy_num": 14,
+          "tyr_rate": "8.3%"
+        },
+        {
+          "date": "2023-11-01",
+          "date1": "2023/11",
+          "num": 122,
+          "real_num": 2345,
+          "rate": "5.2%",
+          "tjy_num": 17,
+          "tyr_rate": "13.9%"
+        },
+        {
+          "date": "2023-12-01",
+          "date1": "2023/12",
+          "num": 110,
+          "real_num": 2933,
+          "rate": "3.8%",
+          "tjy_num": 16,
+          "tyr_rate": "14.5%"
+        }
+      ],
+      "year_num": 1619,
+      "year_real_num": 26769,
+      "year_tjynum": 211,
+      "year_rate": "6.0%",
+      "year_tjyrate": "13.0%"
+    },
+    "2024": {
+      "year": 2024,
+      "list": [
+        {
+          "date": "2024-01-01",
+          "date1": "2024/01",
+          "num": 120,
+          "real_num": 3831,
+          "rate": "3.1%",
+          "tjy_num": 15,
+          "tyr_rate": "12.5%"
+        },
+        {
+          "date": "2024-02-01",
+          "date1": "2024/02",
+          "num": 130,
+          "real_num": 2987,
+          "rate": "4.4%",
+          "tjy_num": 14,
+          "tyr_rate": "10.8%"
+        },
+        {
+          "date": "2024-03-01",
+          "date1": "2024/03",
+          "num": 158,
+          "real_num": 3105,
+          "rate": "5.1%",
+          "tjy_num": 23,
+          "tyr_rate": "14.6%"
+        },
+        {
+          "date": "2024-04-01",
+          "date1": "2024/04",
+          "num": 186,
+          "real_num": 2514,
+          "rate": "7.4%",
+          "tjy_num": 32,
+          "tyr_rate": "17.2%"
+        },
+        {
+          "date": "2024-05-01",
+          "date1": "2024/05",
+          "num": 144,
+          "real_num": 3380,
+          "rate": "4.3%",
+          "tjy_num": 17,
+          "tyr_rate": "11.8%"
+        },
+        {
+          "date": "2024-06-01",
+          "date1": "2024/06",
+          "num": 104,
+          "real_num": 2934,
+          "rate": "3.5%",
+          "tjy_num": 24,
+          "tyr_rate": "23.1%"
+        },
+        {
+          "date": "2024-07-01",
+          "date1": "2024/07",
+          "num": 147,
+          "real_num": 2849,
+          "rate": "5.2%",
+          "tjy_num": 38,
+          "tyr_rate": "25.9%"
+        },
+        {
+          "date": "2024-08-01",
+          "date1": "2024/08",
+          "num": 130,
+          "real_num": 2485,
+          "rate": "5.2%",
+          "tjy_num": 31,
+          "tyr_rate": "23.8%"
+        },
+        {
+          "date": "2024-09-01",
+          "date1": "2024/09",
+          "num": 103,
+          "real_num": 2399,
+          "rate": "4.3%",
+          "tjy_num": 26,
+          "tyr_rate": "25.2%"
+        },
+        {
+          "date": "2024-10-01",
+          "date1": "2024/10",
+          "num": 112,
+          "real_num": 2460,
+          "rate": "4.6%",
+          "tjy_num": 25,
+          "tyr_rate": "22.3%"
+        },
+        {
+          "date": "2024-11-01",
+          "date1": "2024/11",
+          "num": 117,
+          "real_num": 2098,
+          "rate": "5.6%",
+          "tjy_num": 18,
+          "tyr_rate": "15.4%"
+        },
+        {
+          "date": "2024-12-01",
+          "date1": "2024/12",
+          "num": 94,
+          "real_num": 2932,
+          "rate": "3.2%",
+          "tjy_num": 18,
+          "tyr_rate": "19.1%"
+        }
+      ],
+      "year_num": 1545,
+      "year_real_num": 33974,
+      "year_tjynum": 281,
+      "year_rate": "4.5%",
+      "year_tjyrate": "18.2%"
+    },
+    "2025": {
+      "year": 2025,
+      "list": [
+        {
+          "date": "2025-01-01",
+          "date1": "2025/01",
+          "num": 84,
+          "real_num": 2437,
+          "rate": "3.4%",
+          "tjy_num": 21,
+          "tyr_rate": "25.0%"
+        },
+        {
+          "date": "2025-02-01",
+          "date1": "2025/02",
+          "num": 99,
+          "real_num": 2134,
+          "rate": "4.6%",
+          "tjy_num": 27,
+          "tyr_rate": "27.3%"
+        },
+        {
+          "date": "2025-03-01",
+          "date1": "2025/03",
+          "num": 123,
+          "real_num": 2758,
+          "rate": "4.5%",
+          "tjy_num": 28,
+          "tyr_rate": "22.8%"
+        },
+        {
+          "date": "2025-04-01",
+          "date1": "2025/04",
+          "num": 182,
+          "real_num": 2559,
+          "rate": "7.1%",
+          "tjy_num": 47,
+          "tyr_rate": "25.8%"
+        },
+        {
+          "date": "2025-05-01",
+          "date1": "2025/05",
+          "num": 235,
+          "real_num": 2900,
+          "rate": "8.1%",
+          "tjy_num": 37,
+          "tyr_rate": "15.7%"
+        },
+        {
+          "date": "2025-06-01",
+          "date1": "2025/06",
+          "num": 210,
+          "real_num": 2685,
+          "rate": "7.8%",
+          "tjy_num": 47,
+          "tyr_rate": "22.4%"
+        },
+        {
+          "date": "2025-07-01",
+          "date1": "2025/07",
+          "num": 150,
+          "real_num": 2565,
+          "rate": "5.8%",
+          "tjy_num": 40,
+          "tyr_rate": "26.7%"
+        },
+        {
+          "date": "2025-08-01",
+          "date1": "2025/08",
+          "num": 143,
+          "real_num": 2777,
+          "rate": "5.1%",
+          "tjy_num": 39,
+          "tyr_rate": "27.3%"
+        },
+        {
+          "date": "2025-09-01",
+          "date1": "2025/09",
+          "num": 178,
+          "real_num": 2694,
+          "rate": "6.6%",
+          "tjy_num": 53,
+          "tyr_rate": "29.8%"
+        },
+        {
+          "date": "2025-10-01",
+          "date1": "2025/10",
+          "num": 228,
+          "real_num": 3007,
+          "rate": "7.6%",
+          "tjy_num": 68,
+          "tyr_rate": "29.8%"
+        },
+        {
+          "date": "2025-11-01",
+          "date1": "2025/11",
+          "num": 194,
+          "real_num": 2152,
+          "rate": "9.0%",
+          "tjy_num": 58,
+          "tyr_rate": "29.9%"
+        },
+        {
+          "date": "2025-12-01",
+          "date1": "2025/12",
+          "num": 176,
+          "real_num": 2714,
+          "rate": "6.5%",
+          "tjy_num": 52,
+          "tyr_rate": "29.5%"
+        }
+      ],
+      "year_num": 2002,
+      "year_real_num": 31382,
+      "year_tjynum": 517,
+      "year_rate": "6.4%",
+      "year_tjyrate": "25.8%"
+    }
+  }
+}

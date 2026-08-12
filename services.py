@@ -19,6 +19,12 @@ USER_PERSONA_JSON_PATH = DATA_DIR / "user_persona_stats.json"
 TRADING_DIST_JSON_PATH = DATA_DIR / "trading_distribution_2015_2025.json"
 VOLUME_DIST_JSON_PATH = DATA_DIR / "volume_distribution_history_2015_2025.json"
 ALL_STAT_JSON_PATH = DATA_DIR / "all_stat_daily_2015_2025.json"
+YEAR_STAT_JSON_PATH = DATA_DIR / "year_stat_2015_2025.json"
+YEAR_STAT_HISTORY_BOUNDARY = 2026
+DEPOSIT_SPEED_JSON_PATH = DATA_DIR / "deposit_speed_2015_2025.json"
+DEPOSIT_SPEED_HISTORY_BOUNDARY = date(2026, 1, 1)
+FIRST_DEPOSIT_JSON_PATH = DATA_DIR / "first_deposit_stat_2015_2025.json"
+FIRST_DEPOSIT_HISTORY_BOUNDARY = 2026
 
 PERSONA_CACHE_TTL = 3600  # 1小时
 
@@ -61,7 +67,7 @@ def get_valid_login_codes() -> set:
 
 @lru_cache(maxsize=1)
 def get_activated_login_codes() -> set:
-    """已激活账户：gold.js_bank_notify 中支付成功(iPayResult=1)的账户。"""
+    """已激活账户：gold.js_bank_notify 中入金成功(iPayResult=1)的账户。"""
     try:
         sql = """
             SELECT DISTINCT sUserName
@@ -72,13 +78,12 @@ def get_activated_login_codes() -> set:
         if df.empty:
             return set()
         df['login_code'] = extract_login_code(df['sUserName'])
-        activated = df[df['login_code'] != '0']['login_code'].unique()
-        return set(activated)
+        return set(df[df['login_code'] != '0']['login_code'].unique())
     except Exception as e:
         print(f"Failed to load activated login codes: {e}")
         return set()
 
-def query_trading_stat_df(year: int) -> pd.DataFrame:
+def _query_trading_stat_from_db(year: int) -> pd.DataFrame:
     try:
         start_dt = datetime(year, 1, 1, 0, 0, 0)
         today = date.today()
@@ -227,9 +232,78 @@ def query_trading_stat_df(year: int) -> pd.DataFrame:
         print(f"Query failed for {year}: {e}")
         return pd.DataFrame()
 
+
+YEAR_STAT_COLUMNS = [
+    '年月', '开仓人数', '平仓人数', '开仓+平仓 人数',
+    '开仓人数(A)', '平仓人数(A)', '开仓+平仓 人数(A)',
+]
+
+
+@lru_cache(maxsize=1)
+def _load_year_stat_history_df() -> dict[int, pd.DataFrame]:
+    if not YEAR_STAT_JSON_PATH.exists():
+        return {}
+    try:
+        with open(YEAR_STAT_JSON_PATH, 'r', encoding='utf-8') as f:
+            payload = json.load(f)
+        result: dict[int, pd.DataFrame] = {}
+        for year_key, rows in payload.get("data", {}).items():
+            df = pd.DataFrame(rows)
+            if df.empty:
+                continue
+            for col in YEAR_STAT_COLUMNS:
+                if col not in df.columns:
+                    df[col] = 0
+            result[int(year_key)] = df[YEAR_STAT_COLUMNS].copy()
+        return result
+    except Exception as e:
+        print(f"读取月交易人数历史缓存失败: {e}")
+        return {}
+
+
+def clear_year_stat_history_cache():
+    _load_year_stat_history_df.cache_clear()
+
+
+def query_trading_stat_df(year: int) -> pd.DataFrame:
+    """2015-2025 优先读静态 JSON，2026 年起在线查库。"""
+    if year < YEAR_STAT_HISTORY_BOUNDARY:
+        history = _load_year_stat_history_df()
+        cached = history.get(year)
+        if cached is not None and not cached.empty:
+            return cached.copy()
+    return _query_trading_stat_from_db(year)
+
+def _iter_weekday_trading_days(start_date: date, end_date: date):
+    """遍历区间内交易日标签为周一至周五的日期（按交易日周六日排除）。"""
+    d = start_date
+    while d <= end_date:
+        if d.weekday() < 5:
+            yield d
+        d += timedelta(days=1)
+
+
+def _normalize_trading_day_key(value) -> date | None:
+    """将 groupby / get_trading_day 的结果统一为 date。"""
+    if value is None or (isinstance(value, float) and pd.isna(value)):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        ts = pd.Timestamp(value)
+        if pd.isna(ts):
+            return None
+        return ts.date()
+    except Exception:
+        return None
+
+
 def query_daily_trading_stat_df(start_date: date, end_date: date) -> pd.DataFrame:
     try:
-        # 为了包含跨午夜的交易，查询范围向后多取 1 天
+        # 交易日以夏令时 05:00、冬令时 06:00 为界。为覆盖结束交易日
+        # 凌晨分界点前仍归属于前一交易日的记录，查询范围向后多取 1 天。
         start_dt = datetime.combine(start_date, datetime.min.time())
         end_dt = datetime.combine(end_date + timedelta(days=1), datetime.max.time())
 
@@ -293,14 +367,20 @@ def query_daily_trading_stat_df(start_date: date, end_date: date) -> pd.DataFram
         df_open = pd.concat(df_open_list, ignore_index=True) if df_open_list else pd.DataFrame()
         df_close = pd.concat(df_close_list, ignore_index=True) if df_close_list else pd.DataFrame()
 
-        result_rows = []
+        empty_row = {
+            '开仓人数': 0, '平仓人数': 0, '开仓+平仓 人数': 0,
+            '开仓人数(A)': 0, '平仓人数(A)': 0, '开仓+平仓 人数(A)': 0,
+        }
+        day_stats: dict[date, dict] = {}
+
         if not df_open.empty or not df_close.empty:
             df_open = df_open.assign(type='开仓') if not df_open.empty else pd.DataFrame()
             df_close = df_close.assign(type='平仓') if not df_close.empty else pd.DataFrame()
 
             df_all = pd.concat([df_open, df_close], ignore_index=True)
             df_all['trade_time'] = pd.to_datetime(df_all['trade_time'], errors='coerce')
-            # 关键修改：日统计现在基于交易日而非自然日
+            df_all = df_all.dropna(subset=['trade_time'])
+            # 按交易日统计（夏令时 05:00 / 冬令时 06:00），不是自然日。
             df_all['trade_date'] = df_all['trade_time'].apply(get_trading_day)
 
             valid_codes = get_valid_login_codes()
@@ -310,12 +390,15 @@ def query_daily_trading_stat_df(start_date: date, end_date: date) -> pd.DataFram
 
             if not df_all.empty:
                 activated_codes = get_activated_login_codes()
-                day_stats = {}
-                for d, group in df_all.groupby('trade_date'):
+                for raw_day, group in df_all.groupby('trade_date'):
+                    trading_day = _normalize_trading_day_key(raw_day)
+                    # 交易日为周六、日的数据不进入图表/表格（自然日周末但归属周五的仍计周五）。
+                    if trading_day is None or trading_day.weekday() >= 5:
+                        continue
                     open_users = set(group[group['type'] == '开仓']['login_code'].unique())
                     close_users = set(group[group['type'] == '平仓']['login_code'].unique())
                     all_users = open_users | close_users
-                    day_stats[d] = {
+                    day_stats[trading_day] = {
                         '开仓人数': len(open_users),
                         '平仓人数': len(close_users),
                         '开仓+平仓 人数': len(all_users),
@@ -324,21 +407,17 @@ def query_daily_trading_stat_df(start_date: date, end_date: date) -> pd.DataFram
                         '开仓+平仓 人数(A)': len(all_users & activated_codes),
                     }
 
-                empty_row = {'开仓人数': 0, '平仓人数': 0, '开仓+平仓 人数': 0, '开仓人数(A)': 0, '平仓人数(A)': 0, '开仓+平仓 人数(A)': 0}
-                d = start_date
-                while d <= end_date:
-                    row = {'日期': d.strftime('%Y-%m-%d'), **(day_stats.get(d, empty_row))}
-                    result_rows.append(row)
-                    d += timedelta(days=1)
-        
-        if not result_rows:
-            empty_row = {'开仓人数': 0, '平仓人数': 0, '开仓+平仓 人数': 0, '开仓人数(A)': 0, '平仓人数(A)': 0, '开仓+平仓 人数(A)': 0}
-            d = start_date
-            while d <= end_date:
-                result_rows.append({'日期': d.strftime('%Y-%m-%d'), **empty_row})
-                d += timedelta(days=1)
+        result_rows = [
+            {'日期': d.strftime('%Y-%m-%d'), **(day_stats.get(d, empty_row))}
+            for d in _iter_weekday_trading_days(start_date, end_date)
+        ]
 
         df_result = pd.DataFrame(result_rows)
+        if df_result.empty:
+            return pd.DataFrame(columns=[
+                '日期', '开仓人数', '平仓人数', '开仓+平仓 人数',
+                '开仓人数(A)', '平仓人数(A)', '开仓+平仓 人数(A)',
+            ])
         df_result = df_result.sort_values('日期', ascending=False).reset_index(drop=True)
         cols = ['日期', '开仓人数', '平仓人数', '开仓+平仓 人数', '开仓人数(A)', '平仓人数(A)', '开仓+平仓 人数(A)']
         return df_result[cols]
@@ -520,8 +599,8 @@ def query_all_stat(start: str, end: str) -> AllStatResp:
     return summary
 
 
-def query_first_deposit_stat(year: int) -> FirstDepositStatResp:
-    """按伦敦金交易日口径返回月度及年度首入金转化统计。"""
+def _query_first_deposit_stat_from_db(year: int) -> FirstDepositStatResp:
+    """在线查库：按伦敦金交易日口径返回月度及年度首入金转化统计。"""
     # 1 月 1 日处于冬令时，交易日从当天 06:00 开始。
     # 查询到下一年 06:00，可纳入下一自然年凌晨但仍属于本年末交易日的数据。
     start = f"{year}-01-01 06:00:00"
@@ -604,38 +683,24 @@ def query_first_deposit_stat(year: int) -> FirstDepositStatResp:
     referral_sql = """
         SELECT login, addtime
         FROM activity.a_jsinferrer
-        WHERE addtime >= %s
-          AND addtime < %s
-          AND TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
+        WHERE TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
         UNION
         SELECT login, addtime
         FROM activity.a_jsinferrer24
-        WHERE addtime >= %s
-          AND addtime < %s
-          AND TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
+        WHERE TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
     """
     referrals = pd.read_sql(
         referral_sql,
         con=engine_finance,
-        params=(start, end, start, end),
     )
+    # 历史上曾被推荐的辨识码（不要求推荐发生在首入金当月）
     if referrals.empty:
-        referral_codes_by_month = {}
+        ever_referred_codes: set = set()
     else:
-        referrals["addtime"] = pd.to_datetime(
-            referrals["addtime"], errors="coerce"
-        )
-        referrals = referrals.dropna(subset=["addtime"])
-        referrals["trading_date"] = referrals["addtime"].apply(get_trading_day)
-        referrals["month"] = referrals["trading_date"].apply(
-            lambda value: value.strftime("%Y-%m")
-        )
         referrals["login_code"] = extract_login_code(referrals["login"])
-        referrals = referrals[referrals["login_code"] != "0"]
-        referral_codes_by_month = {
-            month: set(group["login_code"])
-            for month, group in referrals.groupby("month")
-        }
+        ever_referred_codes = set(
+            referrals.loc[referrals["login_code"] != "0", "login_code"].unique()
+        )
 
     if first_deposits.empty:
         first_by_month = {}
@@ -646,11 +711,7 @@ def query_first_deposit_stat(year: int) -> FirstDepositStatResp:
         )
         first_by_month = first_deposits.groupby("month").size().to_dict()
         referral_first_by_month = {
-            month: int(
-                group["login_code"].isin(
-                    referral_codes_by_month.get(month, set())
-                ).sum()
-            )
+            month: int(group["login_code"].isin(ever_referred_codes).sum())
             for month, group in first_deposits.groupby("month")
         }
 
@@ -687,6 +748,59 @@ def query_first_deposit_stat(year: int) -> FirstDepositStatResp:
         year_rate=percentage(year_num, year_real_num),
         year_tjyrate=percentage(year_tjynum, year_num),
     )
+
+
+@lru_cache(maxsize=1)
+def _load_first_deposit_history() -> dict[int, dict]:
+    if not FIRST_DEPOSIT_JSON_PATH.exists():
+        return {}
+    try:
+        with open(FIRST_DEPOSIT_JSON_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        data = payload.get("data", {})
+        return {int(year_key): value for year_key, value in data.items()}
+    except Exception as e:
+        print(f"读取首入金历史缓存失败: {e}")
+        return {}
+
+
+def clear_first_deposit_history_cache():
+    _load_first_deposit_history.cache_clear()
+
+
+def query_first_deposit_stat(year: int) -> FirstDepositStatResp:
+    """2015-2025 优先读静态 JSON，2026 年起在线查库。"""
+    if year < FIRST_DEPOSIT_HISTORY_BOUNDARY:
+        cached = _load_first_deposit_history().get(year)
+        if cached:
+            return FirstDepositStatResp.model_validate(cached)
+    return _query_first_deposit_stat_from_db(year)
+
+
+def build_first_deposit_history_payload(
+    start_year: int = 2015,
+    end_year: int = 2025,
+) -> dict:
+    """批量生成 2015-2025 首入金统计（供 regenerate 脚本写入 JSON）。"""
+    data: dict[str, dict] = {}
+    for year in range(start_year, end_year + 1):
+        print(f"  查询年份: {year}")
+        result = _query_first_deposit_stat_from_db(year)
+        if len(result.list) != 12:
+            raise RuntimeError(f"{year} 首入金缓存不完整：应有 12 个月")
+        data[str(year)] = result.model_dump()
+        print(f"  完成 {year}: 首入金={result.year_num}, 曾被推荐={result.year_tjynum}")
+    return {
+        "meta": {
+            "logic": "first_deposit_stat_v2_ever_referred",
+            "start_year": start_year,
+            "end_year": end_year,
+            "calendar": "london_gold_trading_day",
+            "referral": "lifetime_ever_referred",
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        },
+        "data": data,
+    }
 
 
 def query_all_stat_dashboard(start: str, end: str) -> tuple[AllStatResp, pd.DataFrame]:
@@ -1675,3 +1789,427 @@ def query_user_persona(start_year: int = 2015, end_year: int = 2026, age_type: s
             continue
 
     return _apply_age_dimension(results, age_type)
+
+
+# ========== 接口八：入金速度分布 ==========
+DEPOSIT_SPEED_BUCKETS = [
+    ("0-1小时", 0, 1),
+    ("1-2小时", 1, 2),
+    ("2-3小时", 2, 3),
+    ("3-4小时", 3, 4),
+    ("4-5小时", 4, 5),
+    ("5-6小时", 5, 6),
+    ("6-7小时", 6, 7),
+    ("7-8小时", 7, 8),
+    ("8-9小时", 8, 9),
+    ("9-10小时", 9, 10),
+    ("10-11小时", 10, 11),
+    ("11-12小时", 11, 12),
+    ("12-13小时", 12, 13),
+    ("13-14小时", 13, 14),
+    ("14-15小时", 14, 15),
+    ("15-16小时", 15, 16),
+    ("16-17小时", 16, 17),
+    ("17-18小时", 17, 18),
+    ("18-19小时", 18, 19),
+    ("19-20小时", 19, 20),
+    ("20-21小时", 20, 21),
+    ("21-22小时", 21, 22),
+    ("22-23小时", 22, 23),
+    ("23-24小时", 23, 24),
+    ("24-48小时", 24, 48),
+    ("48-72小时", 48, 72),
+    ("72小时-7天", 72, 24 * 7),
+    ("7-15天", 24 * 7, 24 * 15),
+    ("15-30天", 24 * 15, 24 * 30),
+]
+DEPOSIT_SPEED_LABELS = [label for label, _, _ in DEPOSIT_SPEED_BUCKETS] + ["30天以上"]
+
+
+def _deposit_speed_bucket_label(hours: float) -> str | None:
+    """将注册到首入金的小时差映射到展示分桶；负数视为脏数据排除。"""
+    if hours is None or pd.isna(hours) or hours < 0:
+        return None
+    for label, lo, hi in DEPOSIT_SPEED_BUCKETS:
+        if lo <= hours < hi:
+            return label
+    return "30天以上"
+
+
+def _empty_deposit_speed_rows() -> list[dict]:
+    rows = [{"入金速度分布": label, "人数": 0} for label in DEPOSIT_SPEED_LABELS]
+    rows.append({"入金速度分布": "合计", "人数": 0})
+    return rows
+
+
+def _empty_deposit_speed_df() -> pd.DataFrame:
+    return pd.DataFrame(_empty_deposit_speed_rows())
+
+
+def _enrich_deposit_speed_share_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """在人数右侧增加占比、累计占比（相对合计人数）。"""
+    if df is None or df.empty or "人数" not in df.columns:
+        return df
+    out = df.copy()
+    total_row = out[out["入金速度分布"] == "合计"]
+    total = int(total_row["人数"].iloc[0]) if not total_row.empty else int(out["人数"].sum())
+    shares = []
+    cum = 0.0
+    for _, row in out.iterrows():
+        label = row["入金速度分布"]
+        cnt = int(row["人数"] or 0)
+        if label == "合计":
+            if total <= 0:
+                shares.append(("0.0%", "0.0%"))
+            else:
+                shares.append(("100.0%", "100.0%"))
+            continue
+        if total <= 0:
+            shares.append(("0.0%", "0.0%"))
+            continue
+        pct = cnt * 100.0 / total
+        cum += pct
+        shares.append((f"{pct:.1f}%", f"{min(cum, 100.0):.1f}%"))
+    out["占比"] = [s[0] for s in shares]
+    out["累计占比"] = [s[1] for s in shares]
+    # 有人数时，明细最后一行累计占比对齐为 100.0%，避免浮点尾差
+    detail_mask = (out["入金速度分布"] != "合计") & (out["人数"].astype(int) > 0)
+    detail_idx = out.index[detail_mask].tolist()
+    if total > 0 and detail_idx:
+        out.loc[detail_idx[-1], "累计占比"] = "100.0%"
+    return out[["入金速度分布", "人数", "占比", "累计占比"]]
+
+
+def _rows_from_bucket_counts(counts: dict) -> list[dict]:
+    rows = [
+        {"入金速度分布": label, "人数": int(counts.get(label, 0))}
+        for label in DEPOSIT_SPEED_LABELS
+    ]
+    rows.append({"入金速度分布": "合计", "人数": int(sum(r["人数"] for r in rows))})
+    return rows
+
+
+def _sum_deposit_speed_row_lists(row_lists: list[list[dict]]) -> pd.DataFrame:
+    totals = {label: 0 for label in DEPOSIT_SPEED_LABELS}
+    for rows in row_lists:
+        for row in rows:
+            label = row.get("入金速度分布")
+            if label in totals:
+                totals[label] += int(row.get("人数", 0) or 0)
+    return pd.DataFrame(_rows_from_bucket_counts(totals))
+
+
+def _load_first_deposit_times_df() -> pd.DataFrame:
+    first_deposit_sql = """
+        SELECT login_code, MIN(event_time) AS first_deposit_time
+        FROM (
+            SELECT
+                CASE
+                    WHEN sUserName LIKE '168%%'
+                      OR sUserName LIKE '568%%'
+                      OR sUserName LIKE '180%%' THEN '0'
+                    WHEN LEFT(sUserName, 2) IN ('86', '66') THEN SUBSTRING(sUserName, 3, 6)
+                    WHEN LEFT(sUserName, 4) IN ('2000', '2001') THEN SUBSTRING(sUserName, 5, 6)
+                    WHEN LEFT(sUserName, 3) = '530' THEN SUBSTRING(sUserName, 4, 6)
+                    ELSE '0'
+                END AS login_code,
+                sTradeTime AS event_time
+            FROM js_bank_notify
+            WHERE iPayResult = 1
+        ) AS successful_deposits
+        WHERE login_code <> '0'
+          AND CHAR_LENGTH(login_code) = 6
+        GROUP BY login_code
+    """
+    deposit_df = pd.read_sql(first_deposit_sql, con=engine_finance)
+    if deposit_df.empty:
+        return deposit_df
+    deposit_df["login_code"] = deposit_df["login_code"].astype(str)
+    deposit_df["first_deposit_time"] = pd.to_datetime(
+        deposit_df["first_deposit_time"], errors="coerce"
+    )
+    return deposit_df.dropna(subset=["first_deposit_time"])
+
+
+def _load_earliest_reg_df(start_dt: datetime, end_dt: datetime) -> pd.DataFrame:
+    """排除测试组后，按六位辨识码取最早注册时间。"""
+    reg_sql = """
+        SELECT id, reg_time
+        FROM js_mt4_account
+        WHERE reg_time >= %s
+          AND reg_time < %s
+          AND TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99', 'MANAGER')
+    """
+    reg_df = pd.read_sql(
+        reg_sql,
+        con=engine_finance,
+        params=(
+            start_dt.strftime("%Y-%m-%d %H:%M:%S"),
+            end_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        ),
+    )
+    if reg_df.empty:
+        return reg_df
+    reg_df["login_code"] = extract_login_code(reg_df["id"])
+    reg_df = reg_df[reg_df["login_code"] != "0"].copy()
+    if reg_df.empty:
+        return reg_df
+    reg_df["reg_time"] = pd.to_datetime(reg_df["reg_time"], errors="coerce")
+    reg_df = reg_df.dropna(subset=["reg_time"])
+    return (
+        reg_df.sort_values("reg_time")
+        .groupby("login_code", as_index=False)
+        .first()[["login_code", "reg_time"]]
+    )
+
+
+def _load_ever_referred_login_codes() -> set:
+    """历史上曾出现在推荐表的六位辨识码（排除测试组）。"""
+    referral_sql = """
+        SELECT login
+        FROM activity.a_jsinferrer
+        WHERE TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
+        UNION
+        SELECT login
+        FROM activity.a_jsinferrer24
+        WHERE TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99')
+    """
+    referrals = pd.read_sql(referral_sql, con=engine_finance)
+    if referrals.empty:
+        return set()
+    referrals["login_code"] = extract_login_code(referrals["login"])
+    return set(referrals.loc[referrals["login_code"] != "0", "login_code"].unique())
+
+
+def _normalize_deposit_speed_referred_mode(referred: str | None) -> str:
+    """返回 all / exclude。"""
+    text = (referred or "all").strip().lower()
+    if text in {"exclude", "exclude_referred", "no", "none", "without"}:
+        return "exclude"
+    return "all"
+
+
+def _deposit_speed_rows_from_regs(
+    reg_df: pd.DataFrame,
+    deposit_df: pd.DataFrame | None = None,
+    *,
+    exclude_referred: bool = False,
+    referred_codes: set | None = None,
+) -> list[dict]:
+    if reg_df is None or reg_df.empty:
+        return _empty_deposit_speed_rows()
+    if deposit_df is None:
+        deposit_df = _load_first_deposit_times_df()
+    if deposit_df is None or deposit_df.empty:
+        return _empty_deposit_speed_rows()
+
+    work = reg_df
+    if exclude_referred:
+        codes = referred_codes if referred_codes is not None else _load_ever_referred_login_codes()
+        if codes:
+            work = work[~work["login_code"].isin(codes)]
+        if work.empty:
+            return _empty_deposit_speed_rows()
+
+    merged = work.merge(deposit_df, on="login_code", how="inner")
+    if merged.empty:
+        return _empty_deposit_speed_rows()
+
+    merged["hours"] = (
+        merged["first_deposit_time"] - merged["reg_time"]
+    ).dt.total_seconds() / 3600.0
+    merged["bucket"] = merged["hours"].apply(_deposit_speed_bucket_label)
+    merged = merged.dropna(subset=["bucket"])
+    return _rows_from_bucket_counts(merged["bucket"].value_counts().to_dict())
+
+
+def _attach_reg_trading_day(reg_df: pd.DataFrame) -> pd.DataFrame:
+    """为最早注册时间附加伦敦金交易日（夏令时 05:00 / 冬令时 06:00）。"""
+    if reg_df is None or reg_df.empty:
+        return reg_df
+    out = reg_df.copy()
+    out["trading_day"] = out["reg_time"].apply(get_trading_day)
+    out["trading_day"] = pd.to_datetime(out["trading_day"], errors="coerce").dt.date
+    return out.dropna(subset=["trading_day"])
+
+
+def _query_deposit_speed_from_db(
+    start_date: date,
+    end_date: date,
+    referred_mode: str = "all",
+) -> pd.DataFrame:
+    """在线查库：按最早注册时间的交易日落在区间内的账户统计入金速度。"""
+    # 交易日分界在凌晨 05/06 点，SQL 多取前后缓冲日，再按 trading_day 精确裁剪。
+    load_start = datetime(2014, 12, 30)
+    end_dt = datetime.combine(end_date + timedelta(days=2), datetime.min.time())
+    reg_df = _load_earliest_reg_df(load_start, end_dt)
+    if reg_df.empty:
+        return _empty_deposit_speed_df()
+    reg_df = _attach_reg_trading_day(reg_df)
+    reg_df = reg_df[
+        (reg_df["trading_day"] >= start_date) & (reg_df["trading_day"] <= end_date)
+    ]
+    mode = _normalize_deposit_speed_referred_mode(referred_mode)
+    return pd.DataFrame(
+        _deposit_speed_rows_from_regs(
+            reg_df[["login_code", "reg_time"]],
+            exclude_referred=(mode == "exclude"),
+        )
+    )
+
+
+@lru_cache(maxsize=1)
+def _load_deposit_speed_history() -> dict[str, dict]:
+    """
+    返回 { 'YYYY-MM': { 'all': [...], 'exclude': [...] } }。
+    兼容旧格式（月份直接是 list）时仅提供 all。
+    """
+    if not DEPOSIT_SPEED_JSON_PATH.exists():
+        return {}
+    try:
+        with open(DEPOSIT_SPEED_JSON_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        result: dict[str, dict] = {}
+        for month_key, value in payload.get("data", {}).items():
+            key = str(month_key)
+            if isinstance(value, list):
+                result[key] = {"all": value, "exclude": _empty_deposit_speed_rows()}
+            elif isinstance(value, dict):
+                result[key] = {
+                    "all": value.get("all") or _empty_deposit_speed_rows(),
+                    "exclude": value.get("exclude")
+                    or value.get("exclude_referred")
+                    or _empty_deposit_speed_rows(),
+                }
+        return result
+    except Exception as e:
+        print(f"读取入金速度历史缓存失败: {e}")
+        return {}
+
+
+def clear_deposit_speed_history_cache():
+    _load_deposit_speed_history.cache_clear()
+
+
+def _iter_year_months(start_ym: date, end_ym: date):
+    """按月迭代，start_ym/end_ym 使用该月 1 号。"""
+    y, m = start_ym.year, start_ym.month
+    end_y, end_m = end_ym.year, end_ym.month
+    while (y, m) <= (end_y, end_m):
+        yield date(y, m, 1)
+        if m == 12:
+            y, m = y + 1, 1
+        else:
+            m += 1
+
+
+def _month_end(day: date) -> date:
+    if day.month == 12:
+        return date(day.year, 12, 31)
+    return date(day.year, day.month + 1, 1) - timedelta(days=1)
+
+
+def query_deposit_speed_df(
+    start_date: date,
+    end_date: date,
+    referred_mode: str = "all",
+) -> pd.DataFrame:
+    """
+    入金速度分布：首入金时间 - 最早注册时间。
+    样本按最早注册时间的伦敦金交易日归年/月（夏令时 05:00 / 冬令时 06:00）。
+    referred_mode=all 含被推荐人；exclude 为区间样本减去历史上曾被推荐。
+    2015-2025 按月读静态 JSON 后汇总；2026 年起在线查库。
+    """
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    mode = _normalize_deposit_speed_referred_mode(referred_mode)
+
+    history = _load_deposit_speed_history()
+    history_rows: list[list[dict]] = []
+    live_start: date | None = None
+    live_end: date | None = None
+
+    cursor = date(start_date.year, start_date.month, 1)
+    end_month = date(end_date.year, end_date.month, 1)
+    for month_start in _iter_year_months(cursor, end_month):
+        month_key = month_start.strftime("%Y-%m")
+        seg_start = max(start_date, month_start)
+        seg_end = min(end_date, _month_end(month_start))
+        if seg_start > seg_end:
+            continue
+
+        if month_start < DEPOSIT_SPEED_HISTORY_BOUNDARY:
+            cached_month = history.get(month_key) or {}
+            cached = cached_month.get(mode)
+            if cached:
+                history_rows.append(cached)
+            continue
+
+        live_start = seg_start if live_start is None else min(live_start, seg_start)
+        live_end = seg_end if live_end is None else max(live_end, seg_end)
+
+    parts: list[list[dict]] = list(history_rows)
+    if live_start is not None and live_end is not None:
+        live_df = _query_deposit_speed_from_db(live_start, live_end, referred_mode=mode)
+        parts.append(live_df.to_dict(orient="records"))
+
+    if not parts:
+        return _empty_deposit_speed_df()
+    return _sum_deposit_speed_row_lists(parts)
+
+
+def build_deposit_speed_history_payload(
+    start_year: int = 2015,
+    end_year: int = 2025,
+) -> dict:
+    """批量生成 2015-2025 按月入金速度分布（含全部 / 不含被推荐人两套）。"""
+    start_dt = datetime(start_year - 1, 12, 30)
+    end_dt = datetime(end_year + 1, 1, 2)
+    print("  加载首入金时间...")
+    deposit_df = _load_first_deposit_times_df()
+    print(f"  首入金账户数: {len(deposit_df)}")
+    print("  加载注册账户...")
+    reg_df = _load_earliest_reg_df(start_dt, end_dt)
+    print(f"  有效注册辨识码: {len(reg_df)}")
+    print("  加载历史被推荐辨识码...")
+    referred_codes = _load_ever_referred_login_codes()
+    print(f"  曾被推荐辨识码: {len(referred_codes)}")
+
+    data: dict[str, dict] = {}
+    empty_pair = {
+        "all": _empty_deposit_speed_rows(),
+        "exclude": _empty_deposit_speed_rows(),
+    }
+    if reg_df.empty:
+        for month_start in _iter_year_months(date(start_year, 1, 1), date(end_year, 12, 1)):
+            data[month_start.strftime("%Y-%m")] = empty_pair
+    else:
+        reg_df = _attach_reg_trading_day(reg_df)
+        reg_df["year_month"] = pd.to_datetime(reg_df["trading_day"]).dt.strftime("%Y-%m")
+        for month_start in _iter_year_months(date(start_year, 1, 1), date(end_year, 12, 1)):
+            month_key = month_start.strftime("%Y-%m")
+            month_regs = reg_df[reg_df["year_month"] == month_key][["login_code", "reg_time"]]
+            all_rows = _deposit_speed_rows_from_regs(month_regs, deposit_df)
+            exclude_rows = _deposit_speed_rows_from_regs(
+                month_regs,
+                deposit_df,
+                exclude_referred=True,
+                referred_codes=referred_codes,
+            )
+            data[month_key] = {"all": all_rows, "exclude": exclude_rows}
+            all_total = next(r["人数"] for r in all_rows if r["入金速度分布"] == "合计")
+            ex_total = next(r["人数"] for r in exclude_rows if r["入金速度分布"] == "合计")
+            print(f"  完成 {month_key}: 全部={all_total}, 不含推荐={ex_total}")
+
+    return {
+        "meta": {
+            "logic": "deposit_speed_v3_referred_toggle",
+            "start_year": start_year,
+            "end_year": end_year,
+            "grain": "month",
+            "reg_time_calendar": "london_gold_trading_day",
+            "variants": ["all", "exclude"],
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        },
+        "data": data,
+    }

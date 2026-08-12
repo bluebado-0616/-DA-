@@ -27,6 +27,7 @@
     </style>
 </head>
 <body>
+    {% include "_loading_overlay.html" %}
     <div class="container">
         <h2>接口二：日交易人数</h2>
         <div class="filter">统计周期：{{ date_label }}</div>
@@ -54,13 +55,14 @@
                 <span>下一页</span>
             {% endif %}
         </div>
+        <div class="note">按交易日统计（夏令时 05:00 / 冬令时 06:00 切换）；图表与表格均不含交易日为周六、周日的数据。</div>
     </div>
     <script>
         const chartData = {{ chart_data | safe }};
         const fields = ["开仓人数", "平仓人数", "开仓+平仓 人数", "开仓人数(A)", "平仓人数(A)", "开仓+平仓 人数(A)"];
         const chart = echarts.init(document.getElementById("trendChart"));
         chart.setOption({
-            title: { text: "每日交易人数趋势", left: "center" },
+            title: { text: "每日交易人数趋势（交易日·周一至周五）", left: "center" },
             tooltip: { trigger: "axis" },
             legend: { type: "scroll", top: 35 },
             grid: { left: 55, right: 25, top: 85, bottom: 70 },
