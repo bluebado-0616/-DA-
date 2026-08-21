@@ -8,7 +8,7 @@ DB_FINANCE = dict(
     host='18.166.167.237',
     port=3306,
     user='goldaydata',
-    password=os.getenv("DB_PASSWORD", "Goldaydata@2024"),
+    password=os.environ["DB_PASSWORD"],
     db='gold',
     charset='utf8mb4'
 )
@@ -17,7 +17,7 @@ DB_TRADE = dict(
     host='43.198.60.37',
     port=3306,
     user='goldaydata',
-    password=os.getenv("DB_PASSWORD", "Goldaydata@2024"),
+    password=os.environ["DB_PASSWORD"],
     db='traderecord',
     charset='utf8mb4'
 )

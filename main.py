@@ -3,22 +3,27 @@ from pathlib import Path
 import uvicorn
 import os
 from fastapi import FastAPI, Query, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from typing import Optional
 from datetime import datetime, date, timedelta
 
 # 导入自定义模块
 from config import DAILY_STAT_PAGE_SIZE
-from models import AllStatResp, FirstDepositStatResp
+from models import AllStatResp, FirstDepositStatResp, FirstAnswerStatResp
 from utils import (
     trading_distribution_semaphore,
     year_stat_semaphore,
     daily_stat_semaphore,
     user_persona_semaphore,
     deposit_speed_semaphore,
+    first_answer_semaphore,
+    close_pnl_semaphore,
+    last_completed_trading_day,
     cache_load_df,
     cache_save_df,
+    cache_load_obj,
+    cache_save_obj,
     _cache_lock
 )
 import services
@@ -517,3 +522,220 @@ def deposit_speed_html(
         "total_users": total_users,
         "uses_live": uses_live,
     })
+
+
+# ========== 接口九：首次接听类型分析（HTML 看板 + JSON 数据） ==========
+def _first_answer_monthly_wide(result) -> list[dict]:
+    """把长表 monthly 收成一行一个月，便于看板表格。"""
+    months: dict[str, dict] = {}
+    for row in result.monthly:
+        item = months.setdefault(row.month, {
+            "month": row.month,
+            "deposit_count": row.deposit_count,
+            "real_open_count": row.real_open_count,
+            "total": 0,
+            "counts": {},
+            "rates": {},
+        })
+        item["counts"][row.type_name] = row.count
+        item["rates"][row.type_name] = row.rate
+        item["total"] += row.count
+    return list(months.values())
+
+
+@app.get(
+    "/pyapi/first/answer/stat/data",
+    response_model=FirstAnswerStatResp,
+    include_in_schema=False,
+)
+def first_answer_stat_data(
+    mode: Optional[str] = Query("year", description="year / month / range"),
+    year: Optional[int] = Query(None, ge=2015, le=2035),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    start_year: Optional[int] = Query(None, ge=2015, le=2035),
+    start_month: Optional[int] = Query(None, ge=1, le=12),
+    end_year: Optional[int] = Query(None, ge=2015, le=2035),
+    end_month: Optional[int] = Query(None, ge=1, le=12),
+    scope: Optional[str] = Query("all", description="all=全部首次接听；deposit=入金客户"),
+):
+    try:
+        _, start_d, end_d, _ = _resolve_deposit_speed_period(
+            mode, year, month, start_year, start_month, end_year, end_month
+        )
+        return services.query_first_answer_stat(start_d, end_d, scope=scope)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+@app.get(
+    "/pyapi/first/answer/stat",
+    response_class=HTMLResponse,
+    summary="首次接听类型分析",
+)
+def first_answer_stat_html(
+    request: Request,
+    mode: Optional[str] = Query("year", description="year / month / range"),
+    year: Optional[int] = Query(None, ge=2015, le=2035),
+    month: Optional[int] = Query(None, ge=1, le=12),
+    start_year: Optional[int] = Query(None, ge=2015, le=2035),
+    start_month: Optional[int] = Query(None, ge=1, le=12),
+    end_year: Optional[int] = Query(None, ge=2015, le=2035),
+    end_month: Optional[int] = Query(None, ge=1, le=12),
+    scope: Optional[str] = Query("all", description="all=全部首次接听；deposit=入金客户"),
+):
+    mode_text, start_d, end_d, date_label = _resolve_deposit_speed_period(
+        mode, year, month, start_year, start_month, end_year, end_month
+    )
+    scope_key = services._normalize_first_answer_scope(scope)
+    cache_payload = {
+        "mode": mode_text,
+        "start": start_d.isoformat(),
+        "end": end_d.isoformat(),
+        "scope": scope_key,
+        "logic": "first_answer_v3_all_open_deposit_cols",
+    }
+
+    if not first_answer_semaphore.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="首次接听类型分析计算中，请稍后重试")
+
+    try:
+        cached = None
+        with _cache_lock:
+            cached = cache_load_obj("first_answer", cache_payload, cache_subdir="first_answer")
+        if cached is None:
+            result = services.query_first_answer_stat(start_d, end_d, scope=scope_key)
+            with _cache_lock:
+                cache_save_obj(
+                    "first_answer",
+                    cache_payload,
+                    result.model_dump(),
+                    ttl_seconds=3600 * 6,
+                    cache_subdir="first_answer",
+                )
+        else:
+            result = FirstAnswerStatResp.model_validate(cached)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+    finally:
+        first_answer_semaphore.release()
+
+    monthly_wide = _first_answer_monthly_wide(result)
+    return templates.TemplateResponse("first_answer_stat.html", {
+        "request": request,
+        "mode": mode_text,
+        "year": start_d.year if mode_text != "range" else (year or start_d.year),
+        "month": start_d.month if mode_text == "month" else (month or start_d.month),
+        "start_year": start_d.year,
+        "start_month": start_d.month,
+        "end_year": end_d.year,
+        "end_month": end_d.month,
+        "scope": scope_key,
+        "date_label": date_label,
+        "result": result,
+        "monthly_wide": monthly_wide,
+        "chart_types": json.dumps(
+            [row.model_dump() for row in result.types],
+            ensure_ascii=False,
+        ),
+        "chart_monthly": json.dumps(monthly_wide, ensure_ascii=False),
+    })
+
+
+# ========== 接口十：平仓盈亏分析（HTML + CSV + 缓存 + 并发保护） ==========
+def _parse_year_month(value: Optional[str], fallback: date) -> date:
+    if value:
+        try:
+            parsed = datetime.strptime(value, "%Y-%m")
+            return _clamp_month(parsed.year, parsed.month)
+        except ValueError:
+            pass
+    return date(fallback.year, fallback.month, 1)
+
+
+def _resolve_close_pnl_period(start: Optional[str], end: Optional[str]) -> tuple[date, date, str]:
+    cutoff_day = last_completed_trading_day()
+    default_month = date(cutoff_day.year, cutoff_day.month, 1)
+    start_m = _parse_year_month(start, default_month)
+    end_m = _parse_year_month(end, default_month)
+    if start_m > end_m:
+        start_m, end_m = end_m, start_m
+    return start_m, end_m, f"{start_m.strftime('%Y-%m')} 至 {end_m.strftime('%Y-%m')}"
+
+
+def _load_close_pnl_stat(start_m: date, end_m: date) -> dict:
+    cache_payload = {
+        "start": start_m.strftime("%Y-%m"),
+        "end": end_m.strftime("%Y-%m"),
+        "logic": "close_pnl_v4_negative_loss",
+    }
+    if not close_pnl_semaphore.acquire(blocking=False):
+        raise HTTPException(status_code=429, detail="平仓盈亏分析计算中，请稍后重试")
+    try:
+        with _cache_lock:
+            cached = cache_load_obj("close_pnl", cache_payload, cache_subdir="close_pnl")
+        if cached is None:
+            result = services.query_close_pnl_stat(start_m, end_m)
+            with _cache_lock:
+                cache_save_obj(
+                    "close_pnl",
+                    cache_payload,
+                    result,
+                    ttl_seconds=3600 * 6,
+                    cache_subdir="close_pnl",
+                )
+            return result
+        return cached
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+    finally:
+        close_pnl_semaphore.release()
+
+
+@app.get("/pyapi/close/pnl/stat", response_class=HTMLResponse, summary="平仓盈亏分析")
+def close_pnl_stat_html(
+    request: Request,
+    start: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$", examples=["2026-01"]),
+    end: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$", examples=["2026-08"]),
+):
+    start_m, end_m, date_label = _resolve_close_pnl_period(start, end)
+    result = _load_close_pnl_stat(start_m, end_m)
+    csv_url = f"/pyapi/close/pnl/stat/csv?start={start_m.strftime('%Y-%m')}&end={end_m.strftime('%Y-%m')}"
+    return templates.TemplateResponse("close_pnl_stat.html", {
+        "request": request,
+        "start": start_m.strftime("%Y-%m"),
+        "end": end_m.strftime("%Y-%m"),
+        "date_label": date_label,
+        "result": result,
+        "csv_url": csv_url,
+    })
+
+
+@app.get("/pyapi/close/pnl/stat/csv", summary="平仓盈亏分析 CSV 导出", include_in_schema=False)
+def close_pnl_stat_csv(
+    start: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+    end: Optional[str] = Query(None, pattern=r"^\d{4}-\d{2}$"),
+):
+    import csv
+    import io
+    from urllib.parse import quote
+
+    start_m, end_m, _ = _resolve_close_pnl_period(start, end)
+    result = _load_close_pnl_stat(start_m, end_m)
+    output = io.StringIO()
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow(["月份", "指标", *result["buckets"]])
+    for table in result["tables"]:
+        for row in table["rows"]:
+            writer.writerow([table["month"], row["label"], *row["cells"]])
+    filename = f"平仓盈亏分析_{result['start']}_{result['end']}.csv"
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}"
+    }
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers=headers,
+    )

@@ -16,10 +16,12 @@ from services import (
     _build_all_stat_trend_df,
     build_deposit_speed_history_payload,
     build_first_deposit_history_payload,
+    build_first_answer_history_payload,
     clear_all_stat_history_cache,
     clear_year_stat_history_cache,
     clear_deposit_speed_history_cache,
     clear_first_deposit_history_cache,
+    clear_first_answer_history_cache,
     clear_volume_distribution_source_cache,
     get_activated_login_codes,
     get_all_persona_data,
@@ -174,6 +176,23 @@ def regenerate_first_deposit_stat(start_year=2015, end_year=2025):
         json.dump(payload, f, ensure_ascii=False, indent=2)
     os.replace(temp_path, output_path)
     clear_first_deposit_history_cache()
+    print(f"完成！保存至: {output_path}")
+
+
+def regenerate_first_answer_stat(start_year=2015, end_year=2025):
+    print(f"正在生成首次接听类型分析 JSON ({start_year}-{end_year})...")
+    output_path = DATA_DIR / "first_answer_stat_2015_2025.json"
+    payload = build_first_answer_history_payload(start_year, end_year)
+    expected_years = end_year - start_year + 1
+    if len(payload.get("data", {})) != expected_years:
+        raise RuntimeError(
+            f"首次接听缓存年份数不正确：期望 {expected_years}，实际 {len(payload.get('data', {}))}"
+        )
+    temp_path = output_path.with_suffix(".json.tmp")
+    with open(temp_path, "w", encoding="utf-8", newline="\n") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    os.replace(temp_path, output_path)
+    clear_first_answer_history_cache()
     print(f"完成！保存至: {output_path}")
 
 
@@ -363,6 +382,7 @@ if __name__ == "__main__":
         regenerate_year_stat()
         regenerate_deposit_speed()
         regenerate_first_deposit_stat()
+        regenerate_first_answer_stat()
         regenerate_trading_distribution()
         regenerate_user_persona()
         regenerate_volume_distribution()

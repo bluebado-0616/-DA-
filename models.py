@@ -32,3 +32,32 @@ class FirstDepositStatResp(BaseModel):
     year_tjynum: int
     year_rate: str
     year_tjyrate: str
+
+
+class FirstAnswerTypeRow(BaseModel):
+    type_name: str
+    count: int
+    rate: str
+
+
+class FirstAnswerMonthlyRow(BaseModel):
+    month: str
+    type_name: str
+    count: int
+    rate: str
+    deposit_count: int = 0
+    real_open_count: int = 0
+
+
+class FirstAnswerStatResp(BaseModel):
+    scope: str
+    start: str
+    end: str
+    date_label: str
+    type_order: List[str]
+    total_answered: int
+    deposit_count: int
+    real_open_count: int
+    coverage_rate: str
+    types: List[FirstAnswerTypeRow]
+    monthly: List[FirstAnswerMonthlyRow]

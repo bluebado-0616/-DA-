@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口九：首次接听类型分析</title>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * { box-sizing:border-box; }
+        body { margin:0; padding:20px; font-family:system-ui, "Microsoft YaHei", sans-serif; background:#f4f7f6; color:#333; }
+        .container { max-width:1180px; margin:auto; }
+        h2 { margin:0 0 8px; text-align:center; }
+        .subtitle, .note { color:#68717a; text-align:center; }
+        .subtitle { margin-bottom:18px; }
+        .note { margin:12px 0 0; font-size:13px; line-height:1.6; }
+        .controls, .panel, .stat-card { background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.07); }
+        .controls { padding:16px; margin-bottom:18px; text-align:center; }
+        .mode-tabs { display:flex; justify-content:center; gap:8px; margin-bottom:14px; flex-wrap:wrap; }
+        .mode-tabs label { padding:6px 12px; border:1px solid #ccd4dc; border-radius:16px; cursor:pointer; background:#f8fafb; }
+        .mode-tabs input { margin-right:4px; }
+        .mode-panel { display:none; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; }
+        .mode-panel.active { display:flex; }
+        input, select, button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; }
+        button { border-color:#0066cc; background:#0066cc; color:#fff; cursor:pointer; }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(175px, 1fr)); gap:14px; margin-bottom:18px; }
+        .stat-card { padding:16px; border-top:4px solid #0066cc; }
+        .stat-label { color:#68717a; font-size:13px; }
+        .stat-value { margin-top:6px; font-size:23px; font-weight:700; }
+        .chart-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:18px; margin-bottom:18px; }
+        .panel { padding:16px; min-width:0; overflow-x:auto; margin-bottom:18px; }
+        .panel h3 { margin:0 0 8px; font-size:16px; }
+        .chart { width:100%; height:360px; }
+        table { width:100%; border-collapse:collapse; min-width:760px; }
+        th { padding:11px; background:#0066cc; color:#fff; white-space:nowrap; }
+        td { padding:10px; text-align:center; border-bottom:1px solid #e6e9ec; white-space:nowrap; }
+        .col-month { white-space:nowrap; }
+        tbody tr:hover { background:#f7f9fb; }
+        tfoot tr { font-weight:700; background:#f0f4f8; }
+        .monthly-table { min-width: 1200px; }
+        @media (max-width:520px) { .chart-grid { grid-template-columns:1fr; } .chart { height:300px; } }
+    </style>
+</head>
+<body>
+{% include "_loading_overlay.html" %}
+<main class="container">
+    <h2>接口九：首次接听类型分析</h2>
+    <div class="subtitle">{{ date_label }} · {% if scope == 'deposit' %}入金客户（当月开户且已入金）{% else %}全部首次接听{% endif %}</div>
+
+    <div class="controls">
+        <form method="get" action="/pyapi/first/answer/stat" id="answerForm">
+            <div class="mode-tabs">
+                <label><input type="radio" name="scope" value="all" {% if scope != 'deposit' %}checked{% endif %}>全部首次接听</label>
+                <label><input type="radio" name="scope" value="deposit" {% if scope == 'deposit' %}checked{% endif %}>入金客户</label>
+            </div>
+            <div class="mode-tabs">
+                <label><input type="radio" name="mode" value="year" {% if mode == 'year' %}checked{% endif %}>按年</label>
+                <label><input type="radio" name="mode" value="month" {% if mode == 'month' %}checked{% endif %}>按月</label>
+                <label><input type="radio" name="mode" value="range" {% if mode == 'range' %}checked{% endif %}>年月范围</label>
+            </div>
+
+            <div class="mode-panel {% if mode == 'year' %}active{% endif %}" data-mode="year">
+                <label>年份：
+                    <input type="number" name="year" value="{{ year }}" min="2015" max="2035">
+                </label>
+                <button type="submit">查询</button>
+            </div>
+            <div class="mode-panel {% if mode == 'month' %}active{% endif %}" data-mode="month">
+                <label>年份：
+                    <input type="number" name="year" value="{{ year }}" min="2015" max="2035">
+                </label>
+                <label>月份：
+                    <select name="month">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if month == m %}selected{% endif %}>{{ m }}月</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button type="submit">查询</button>
+            </div>
+            <div class="mode-panel {% if mode == 'range' %}active{% endif %}" data-mode="range">
+                <label>开始：
+                    <input type="number" name="start_year" value="{{ start_year }}" min="2015" max="2035" style="width:90px">
+                    <select name="start_month">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if start_month == m %}selected{% endif %}>{{ m }}月</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <span>至</span>
+                <label>结束：
+                    <input type="number" name="end_year" value="{{ end_year }}" min="2015" max="2035" style="width:90px">
+                    <select name="end_month">
+                        {% for m in range(1, 13) %}
+                        <option value="{{ m }}" {% if end_month == m %}selected{% endif %}>{{ m }}月</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <button type="submit">查询</button>
+            </div>
+        </form>
+    </div>
+
+    <section class="stats">
+        <div class="stat-card"><div class="stat-label">期间真实开户数</div><div class="stat-value">{{ result.real_open_count }}</div></div>
+        {% if scope == 'deposit' %}
+        <div class="stat-card"><div class="stat-label">当月开户已入金客户数</div><div class="stat-value">{{ result.deposit_count }}</div></div>
+        <div class="stat-card"><div class="stat-label">其中有首次接听</div><div class="stat-value">{{ result.total_answered }}</div></div>
+        <div class="stat-card"><div class="stat-label">接听覆盖率</div><div class="stat-value">{{ result.coverage_rate }}</div></div>
+        {% else %}
+        <div class="stat-card"><div class="stat-label">首次接听客户数</div><div class="stat-value">{{ result.total_answered }}</div></div>
+        {% endif %}
+    </section>
+
+    <section class="chart-grid">
+        <div class="panel"><h3>接听类型占比</h3><div id="typeChart" class="chart"></div></div>
+        <div class="panel"><h3>分月人数</h3><div id="monthChart" class="chart"></div></div>
+    </section>
+
+    <section class="panel">
+        <h3>整体汇总</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>接听类型</th>
+                    <th>客户数</th>
+                    <th>占比</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in result.types %}
+                <tr>
+                    <td>{{ row.type_name }}</td>
+                    <td>{{ row.count }}</td>
+                    <td>{{ row.rate }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td>合计</td>
+                    <td>{{ result.total_answered }}</td>
+                    <td>{% if result.total_answered %}100.0%{% else %}0.0%{% endif %}</td>
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    <section class="panel">
+        <h3>分月明细{% if scope == 'deposit' %}（按开户月）{% else %}（按首次接听月）{% endif %}</h3>
+        <table class="monthly-table">
+            <thead>
+                <tr>
+                    <th class="col-month">月份</th>
+                    <th>真实开户数</th>
+                    <th>已入金客户数</th>
+                    {% for name in result.type_order %}
+                    <th>{{ name }}</th>
+                    {% endfor %}
+                    <th>有首次接听合计</th>
+                    {% for name in result.type_order %}
+                    <th>{{ name }}占比</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in monthly_wide %}
+                <tr>
+                    <td class="col-month">{{ row.month }}</td>
+                    <td>{{ row.real_open_count }}</td>
+                    <td>{{ row.deposit_count }}</td>
+                    {% for name in result.type_order %}
+                    <td>{{ row.counts.get(name, 0) }}</td>
+                    {% endfor %}
+                    <td>{{ row.total }}</td>
+                    {% for name in result.type_order %}
+                    <td>{{ row.rates.get(name, '0.0%') }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td class="col-month">合计</td>
+                    <td>{{ result.real_open_count }}</td>
+                    <td>{{ result.deposit_count }}</td>
+                    {% for row in result.types %}
+                    <td>{{ row.count }}</td>
+                    {% endfor %}
+                    <td>{{ result.total_answered }}</td>
+                    {% for row in result.types %}
+                    <td>{{ row.rate }}</td>
+                    {% endfor %}
+                </tr>
+            </tfoot>
+        </table>
+    </section>
+
+    <div class="note">
+        首次接听：js_mt4_follow_real 中 follow_state 不含 2/5/6/8/19/21，disposition=ANSWERED，talkduration≥10，每个账号取最早 follow_time。<br>
+        接听类型：follow_why 1=开户回访，10=7天未入金，15=14天未入金，其余=其他。<br>
+        「全部首次接听」按首次接听时间落在所选区间统计；「入金客户」= 期间开户且截至统计时已入金（js_bank_notify.iPayResult=1），再匹配其历史首次接听（不限接听月份），分月按开户月。<br>
+        开户人数月份（真实开户数、已入金客户数）按伦敦金交易日归月：夏令时 05:00、冬令时 06:00 切换交易日。<br>
+        类型占比分母为「有首次接听」人数，不是全部开户/入金客户。排除测试组 99 / G99 / MANAGER。筛选区间含首尾日期。<br>
+        此表“已入金数”是指“在该月开户且截止今日有入过金的客户数”。
+    </div>
+</main>
+<script>
+    const form = document.getElementById("answerForm");
+    const panels = Array.from(document.querySelectorAll(".mode-panel"));
+    function syncMode() {
+        const mode = (form.querySelector('input[name="mode"]:checked') || {}).value || "year";
+        panels.forEach(panel => {
+            const active = panel.dataset.mode === mode;
+            panel.classList.toggle("active", active);
+            panel.querySelectorAll("input, select, button").forEach(el => {
+                el.disabled = !active;
+            });
+        });
+        const yearInputs = form.querySelectorAll('input[name="year"]');
+        yearInputs.forEach(input => {
+            const panel = input.closest(".mode-panel");
+            if (panel) input.disabled = panel.dataset.mode !== mode;
+        });
+    }
+    form.querySelectorAll('input[name="mode"]').forEach(radio => {
+        radio.addEventListener("change", syncMode);
+    });
+    syncMode();
+
+    const typeData = {{ chart_types | safe }};
+    const monthlyData = {{ chart_monthly | safe }};
+    const typeNames = typeData.map(row => row.type_name);
+
+    const typeChart = echarts.init(document.getElementById("typeChart"));
+    typeChart.setOption({
+        tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
+        legend: { bottom: 0 },
+        series: [{
+            type: "pie",
+            radius: ["36%", "64%"],
+            data: typeData.map(row => ({ name: row.type_name, value: row.count })),
+        }],
+    });
+
+    const monthChart = echarts.init(document.getElementById("monthChart"));
+    monthChart.setOption({
+        tooltip: { trigger: "axis" },
+        legend: { top: 0 },
+        grid: { left: 50, right: 20, top: 40, bottom: 40 },
+        xAxis: {
+            type: "category",
+            data: monthlyData.map(row => row.month),
+            axisLabel: { interval: 0, hideOverlap: false, rotate: 0 },
+        },
+        yAxis: { type: "value", name: "人数", splitLine: { lineStyle: { type: "dashed" } } },
+        series: typeNames.map(name => ({
+            name,
+            type: "bar",
+            stack: "answer",
+            data: monthlyData.map(row => (row.counts && row.counts[name]) || 0),
+        })),
+    });
+
+    window.addEventListener("resize", () => {
+        typeChart.resize();
+        monthChart.resize();
+    });
+</script>
+</body>
+</html>

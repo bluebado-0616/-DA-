@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接口十：平仓盈亏分析</title>
+    <style>
+        * { box-sizing:border-box; }
+        body, input, select, button, a.export-btn, label, input[type="month"] {
+            font-family: system-ui, "Microsoft YaHei", sans-serif;
+        }
+        body { margin:0; padding:20px; background:#f4f7f6; color:#333; }
+        .container { max-width:1100px; margin:auto; }
+        h2 { margin:0 0 8px; text-align:center; }
+        .subtitle, .note { color:#68717a; text-align:center; }
+        .subtitle { margin-bottom:18px; }
+        .note { margin:12px 0 0; font-size:13px; line-height:1.7; }
+        .controls { background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.07); padding:16px; margin-bottom:18px; text-align:center; }
+        .controls form { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; }
+        input, button { padding:7px 10px; border:1px solid #ccd4dc; border-radius:5px; font-size:14px; }
+        button { border-color:#0066cc; background:#0066cc; color:#fff; cursor:pointer; }
+        a.export-btn {
+            display:inline-block; padding:7px 14px; border:1px solid #159447; border-radius:5px;
+            background:#159447; color:#fff; text-decoration:none; font-size:14px; cursor:pointer;
+        }
+        .toolbar { display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:12px; }
+        .table-wrap { background:#fff; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,.07); padding:18px; margin-bottom:18px; overflow-x:auto; }
+        table.pnl-table { width:100%; border-collapse:collapse; min-width:820px; font-size:14px; }
+        table.pnl-table th, table.pnl-table td { border:1px solid #222; padding:10px 12px; text-align:center; white-space:nowrap; }
+        table.pnl-table thead th { background:#cfe8f8; font-weight:700; }
+        table.pnl-table tbody td:first-child { text-align:left; }
+        table.pnl-table tbody tr:nth-child(3),
+        table.pnl-table tbody tr:nth-child(6) { background:#f7fbfe; }
+        .empty { text-align:center; color:#68717a; padding:24px; background:#fff; border-radius:10px; }
+    </style>
+</head>
+<body>
+{% include "_loading_overlay.html" %}
+<main class="container">
+    <h2>接口十：平仓盈亏分析</h2>
+    <div class="subtitle">{{ date_label }}{% if result.cutoff_day %} · 统计至前一交易日 {{ result.cutoff_day }}{% endif %}</div>
+
+    <div class="controls">
+        <div class="toolbar">
+            <form method="get" action="/pyapi/close/pnl/stat">
+                <label>开始月份：<input type="month" name="start" value="{{ start }}" min="2015-01" max="2035-12" required></label>
+                <span>至</span>
+                <label>结束月份：<input type="month" name="end" value="{{ end }}" min="2015-01" max="2035-12" required></label>
+                <button type="submit">查询</button>
+            </form>
+            <a class="export-btn" href="{{ csv_url }}" download>下载 CSV</a>
+        </div>
+    </div>
+
+    {% if result.tables %}
+        {% for table in result.tables %}
+        <section class="table-wrap">
+            <table class="pnl-table">
+                <thead>
+                    <tr>
+                        <th>{{ table.month }}</th>
+                        {% for bucket in result.buckets %}
+                        <th>{{ bucket }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in table.rows %}
+                    <tr>
+                        <td>{{ row.label }}</td>
+                        {% for value in row.cells %}
+                        <td>{{ value }}</td>
+                        {% endfor %}
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+        {% endfor %}
+    {% else %}
+        <p class="empty">暂无数据</p>
+    {% endif %}
+
+    <div class="note">
+        数据来源：js_mt5_deals_view。交易盈亏金额(美元) = PROFIT + SWAPS + COMMISSION_AGENT。<br>
+        按平仓时间的伦敦金交易日归月（夏令时 05:00 / 冬令时 06:00 切换）。持仓时长 = CLOSE_TIME − OPEN_TIME。<br>
+        四档：≤15分钟；15分钟&lt; t ≤60分钟；60分钟&lt; t ≤24小时；&gt;24小时。<br>
+        盈亏为 0 的交易不计入盈利或亏损。亏损金额展示为负数；比例 = |盈利 / 亏损|，分母为 0 时显示为 -。<br>
+        当月未结束时，统计到前一个已结束的伦敦金交易日（不含当天进行中的交易日；若落在周末则回退到周五）。金额保留 2 位小数，笔数为整数。
+    </div>
+</main>
+</body>
+</html>

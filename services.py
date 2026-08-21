@@ -3,9 +3,10 @@ from sqlalchemy import text
 from functools import lru_cache
 from datetime import datetime, date, timedelta
 from config import engine_finance, engine_trade, engine_trade_mt4, BOUNDARY_DATETIME
+from config_PROFIT import engine_profit
 from utils import extract_login_code
-from models import AllStatResp, FirstDepositStatResp
-from utils import extract_login_code, get_trading_day
+from models import AllStatResp, FirstDepositStatResp, FirstAnswerStatResp
+from utils import extract_login_code, get_trading_day, last_completed_trading_day
 import json
 import time
 from copy import deepcopy
@@ -25,6 +26,8 @@ DEPOSIT_SPEED_JSON_PATH = DATA_DIR / "deposit_speed_2015_2025.json"
 DEPOSIT_SPEED_HISTORY_BOUNDARY = date(2026, 1, 1)
 FIRST_DEPOSIT_JSON_PATH = DATA_DIR / "first_deposit_stat_2015_2025.json"
 FIRST_DEPOSIT_HISTORY_BOUNDARY = 2026
+FIRST_ANSWER_JSON_PATH = DATA_DIR / "first_answer_stat_2015_2025.json"
+FIRST_ANSWER_HISTORY_BOUNDARY = date(2026, 1, 1)
 
 PERSONA_CACHE_TTL = 3600  # 1小时
 
@@ -602,9 +605,16 @@ def query_all_stat(start: str, end: str) -> AllStatResp:
 def _query_first_deposit_stat_from_db(year: int) -> FirstDepositStatResp:
     """在线查库：按伦敦金交易日口径返回月度及年度首入金转化统计。"""
     # 1 月 1 日处于冬令时，交易日从当天 06:00 开始。
-    # 查询到下一年 06:00，可纳入下一自然年凌晨但仍属于本年末交易日的数据。
+    yesterday = date.today() - timedelta(days=1)
     start = f"{year}-01-01 06:00:00"
-    end = f"{year + 1}-01-01 06:00:00"
+    if year >= date.today().year:
+        # 当年当月只统计到昨天，SQL 多取缓冲日覆盖凌晨分界。
+        end = datetime.combine(
+            yesterday + timedelta(days=2), datetime.min.time()
+        ).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        # 历史整年：查到下一年 06:00，纳入年末跨交易日数据。
+        end = f"{year + 1}-01-01 06:00:00"
 
     first_deposit_sql = """
         SELECT login_code, MIN(event_time) AS addtime
@@ -652,6 +662,13 @@ def _query_first_deposit_stat_from_db(year: int) -> FirstDepositStatResp:
         first_deposits["trading_date"] = first_deposits["addtime"].apply(
             get_trading_day
         )
+        first_deposits["trading_date"] = first_deposits["trading_date"].apply(
+            _normalize_trading_day_key
+        )
+        first_deposits = first_deposits.dropna(subset=["trading_date"])
+        first_deposits = first_deposits[
+            first_deposits["trading_date"] <= yesterday
+        ]
 
     real_account_sql = """
         SELECT reg_time
@@ -675,6 +692,11 @@ def _query_first_deposit_stat_from_db(year: int) -> FirstDepositStatResp:
         real_accounts["trading_date"] = real_accounts["reg_time"].apply(
             get_trading_day
         )
+        real_accounts["trading_date"] = real_accounts["trading_date"].apply(
+            _normalize_trading_day_key
+        )
+        real_accounts = real_accounts.dropna(subset=["trading_date"])
+        real_accounts = real_accounts[real_accounts["trading_date"] <= yesterday]
         real_accounts["month"] = real_accounts["trading_date"].apply(
             lambda value: value.strftime("%Y-%m")
         )
@@ -2212,4 +2234,698 @@ def build_deposit_speed_history_payload(
             "generated_at": datetime.now().isoformat(timespec="seconds"),
         },
         "data": data,
+    }
+
+
+# ========== 接口九：首次接听类型分析 ==========
+FOLLOW_TYPE_MAP = {
+    "1": "开户回访",
+    "10": "7天未入金",
+    "15": "14天未入金",
+}
+FIRST_ANSWER_TYPE_ORDER = ["开户回访", "7天未入金", "14天未入金", "其他"]
+
+
+def _normalize_first_answer_scope(scope: str | None) -> str:
+    text = (scope or "all").strip().lower()
+    if text in {"deposit", "in", "deposit_customers"}:
+        return "deposit"
+    return "all"
+
+
+def _first_answer_pct(numerator: int, denominator: int) -> str:
+    if not denominator:
+        return "0.0%"
+    return f"{round(numerator * 100 / denominator, 1):.1f}%"
+
+
+def _map_follow_type(follow_why) -> str:
+    if follow_why is None or (isinstance(follow_why, float) and pd.isna(follow_why)):
+        return "其他"
+    return FOLLOW_TYPE_MAP.get(str(follow_why).strip(), "其他")
+
+
+def _normalize_account(series: pd.Series) -> pd.Series:
+    return series.astype(str).str.strip().str.replace(r"\.0$", "", regex=True)
+
+
+def _iter_months_inclusive(start_date: date, end_date: date) -> list[str]:
+    months = []
+    for month_start in _iter_year_months(
+        date(start_date.year, start_date.month, 1),
+        date(end_date.year, end_date.month, 1),
+    ):
+        months.append(month_start.strftime("%Y-%m"))
+    return months
+
+
+def _load_first_answer_df(
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> pd.DataFrame:
+    """
+    首次接听：follow_state 排除未接通类，disposition=ANSWERED，talkduration>=10，
+    每个 account 取 MIN(follow_time)。可选再按首次接听时间过滤（左闭右开）。
+    """
+    sql = """
+        SELECT
+            x.account AS account,
+            x.follow_time AS first_answer_time,
+            x.follow_why
+        FROM (
+            SELECT a.account, a.follow_time, a.follow_why
+            FROM js_mt4_follow_real a
+            INNER JOIN (
+                SELECT account, MIN(follow_time) AS min_time
+                FROM js_mt4_follow_real
+                WHERE follow_state NOT IN ('2', '5', '6', '8', '19', '21')
+                  AND disposition = 'ANSWERED'
+                  AND talkduration >= 10
+                GROUP BY account
+            ) b ON a.account = b.account
+               AND a.follow_time = b.min_time
+            WHERE a.follow_state NOT IN ('2', '5', '6', '8', '19', '21')
+              AND a.disposition = 'ANSWERED'
+              AND a.talkduration >= 10
+        ) x
+    """
+    params: dict = {}
+    if start_time and end_time:
+        sql += " WHERE x.follow_time >= :start_time AND x.follow_time < :end_time"
+        params = {"start_time": start_time, "end_time": end_time}
+        sql += " ORDER BY x.follow_time, x.account"
+        df = pd.read_sql(text(sql), engine_finance, params=params)
+        return _finalize_first_answer_df(df)
+
+    cached = _load_all_first_answer_df_cached()
+    return cached.copy()
+
+
+def _finalize_first_answer_df(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["account", "first_answer_time", "follow_why", "login_code", "接听类型", "月份"])
+    df = df.copy()
+    df["account"] = _normalize_account(df["account"])
+    df["first_answer_time"] = pd.to_datetime(df["first_answer_time"], errors="coerce")
+    df = (
+        df.sort_values(["account", "first_answer_time"])
+        .drop_duplicates("account", keep="first")
+        .reset_index(drop=True)
+    )
+    df["login_code"] = extract_login_code(df["account"])
+    df["接听类型"] = df["follow_why"].apply(_map_follow_type)
+    df["月份"] = df["first_answer_time"].dt.strftime("%Y-%m")
+    return df
+
+
+@lru_cache(maxsize=1)
+def _load_all_first_answer_df_cached() -> pd.DataFrame:
+    sql = """
+        SELECT
+            x.account AS account,
+            x.follow_time AS first_answer_time,
+            x.follow_why
+        FROM (
+            SELECT a.account, a.follow_time, a.follow_why
+            FROM js_mt4_follow_real a
+            INNER JOIN (
+                SELECT account, MIN(follow_time) AS min_time
+                FROM js_mt4_follow_real
+                WHERE follow_state NOT IN ('2', '5', '6', '8', '19', '21')
+                  AND disposition = 'ANSWERED'
+                  AND talkduration >= 10
+                GROUP BY account
+            ) b ON a.account = b.account
+               AND a.follow_time = b.min_time
+            WHERE a.follow_state NOT IN ('2', '5', '6', '8', '19', '21')
+              AND a.disposition = 'ANSWERED'
+              AND a.talkduration >= 10
+        ) x
+        ORDER BY x.follow_time, x.account
+    """
+    df = pd.read_sql(text(sql), engine_finance)
+    return _finalize_first_answer_df(df)
+
+
+def _load_open_accounts_by_trading_month(start_date: date, end_date: date) -> pd.DataFrame:
+    """
+    期间开户账号：reg_time 按伦敦金交易日归月（夏令时 05:00 / 冬令时 06:00）。
+    SQL 多取前后缓冲日，再按 trading_day 精确裁剪到 [start_date, end_date]。
+    """
+    start_time = datetime.combine(
+        start_date - timedelta(days=1), datetime.min.time()
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    end_time = datetime.combine(
+        end_date + timedelta(days=2), datetime.min.time()
+    ).strftime("%Y-%m-%d %H:%M:%S")
+    sql = text("""
+        SELECT id AS account, reg_time
+        FROM js_mt4_account
+        WHERE TRIM(UPPER(COALESCE(`group`, ''))) NOT IN ('99', 'G99', 'MANAGER')
+          AND reg_time >= :start_time
+          AND reg_time < :end_time
+    """)
+    df = pd.read_sql(sql, engine_finance, params={"start_time": start_time, "end_time": end_time})
+    empty_cols = ["account", "reg_time", "login_code", "trading_day", "开户月份"]
+    if df.empty:
+        return pd.DataFrame(columns=empty_cols)
+
+    df["account"] = _normalize_account(df["account"])
+    df["reg_time"] = pd.to_datetime(df["reg_time"], errors="coerce")
+    df = df.dropna(subset=["reg_time"]).copy()
+    df["login_code"] = extract_login_code(df["account"])
+    df["trading_day"] = df["reg_time"].apply(get_trading_day)
+    df["trading_day"] = df["trading_day"].apply(_normalize_trading_day_key)
+    df = df.dropna(subset=["trading_day"])
+    df = df[
+        (df["trading_day"] >= start_date) & (df["trading_day"] <= end_date)
+    ].copy()
+    if df.empty:
+        return pd.DataFrame(columns=empty_cols)
+    df["开户月份"] = df["trading_day"].apply(lambda value: value.strftime("%Y-%m"))
+    return df.reset_index(drop=True)
+
+
+def _load_real_open_monthly(start_date: date, end_date: date) -> pd.DataFrame:
+    df = _load_open_accounts_by_trading_month(start_date, end_date)
+    if df.empty:
+        return pd.DataFrame(columns=["月份", "real_open_count"])
+    return (
+        df.groupby("开户月份", dropna=False)["account"]
+        .nunique()
+        .reset_index(name="real_open_count")
+        .rename(columns={"开户月份": "月份"})
+    )
+
+
+def _load_deposit_customers(start_date: date, end_date: date) -> pd.DataFrame:
+    """期间开户（排除测试组，按交易日归月）且截至统计时已入金；同月同辨别码保留最早开户账号。"""
+    df = _load_open_accounts_by_trading_month(start_date, end_date)
+    if df.empty:
+        return pd.DataFrame(columns=["account", "reg_time", "login_code", "开户月份"])
+
+    df = df[df["login_code"] != "0"].copy()
+    activated = get_activated_login_codes()
+    df = df[df["login_code"].isin(activated)].copy()
+    return (
+        df.sort_values(["开户月份", "login_code", "reg_time"])
+        .drop_duplicates(["开户月份", "login_code"], keep="first")
+        .reset_index(drop=True)
+    )
+
+
+def _match_deposit_first_answer(
+    deposit_df: pd.DataFrame,
+    first_answer_df: pd.DataFrame,
+) -> pd.DataFrame:
+    if deposit_df.empty:
+        out = deposit_df.copy()
+        out["first_answer_time"] = pd.NaT
+        out["接听类型"] = pd.NA
+        out["月份"] = out["开户月份"] if "开户月份" in out.columns else pd.NA
+        return out
+
+    if first_answer_df.empty:
+        out = deposit_df.copy()
+        out["first_answer_time"] = pd.NaT
+        out["接听类型"] = pd.NA
+        out["月份"] = out["开户月份"]
+        return out
+
+    fa = first_answer_df.copy()
+    fa_by_account = fa[["account", "first_answer_time", "接听类型"]].drop_duplicates("account")
+    fa_by_code = (
+        fa.sort_values("first_answer_time")
+        .drop_duplicates("login_code", keep="first")
+        [["login_code", "first_answer_time", "接听类型"]]
+        .rename(columns={
+            "first_answer_time": "first_answer_time_code",
+            "接听类型": "接听类型_code",
+        })
+    )
+    out = deposit_df.merge(fa_by_account, on="account", how="left")
+    out = out.merge(fa_by_code, on="login_code", how="left")
+    out["first_answer_time"] = out["first_answer_time"].fillna(out["first_answer_time_code"])
+    out["接听类型"] = out["接听类型"].fillna(out["接听类型_code"])
+    out = out.drop(columns=["first_answer_time_code", "接听类型_code"])
+    out["月份"] = out["开户月份"]
+    return out
+
+
+def _build_type_counts(df: pd.DataFrame, id_col: str) -> dict[str, int]:
+    counts = {name: 0 for name in FIRST_ANSWER_TYPE_ORDER}
+    if df.empty or "接听类型" not in df.columns:
+        return counts
+    work = df[df["接听类型"].notna()].copy()
+    if work.empty:
+        return counts
+    grouped = work.groupby("接听类型", dropna=False)[id_col].nunique()
+    for name in FIRST_ANSWER_TYPE_ORDER:
+        counts[name] = int(grouped.get(name, 0))
+    return counts
+
+
+def _query_first_answer_stat_from_db(
+    start_date: date,
+    end_date: date,
+    scope: str = "all",
+) -> FirstAnswerStatResp:
+    """
+    首次接听类型分析。
+    scope=all：首次接听时间落在区间内。
+    scope=deposit：期间开户且已入金客户，匹配其历史首次接听类型（不限接听月份）。
+    开户月份按伦敦金交易日（夏令时 05:00 / 冬令时 06:00）归月。
+    """
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    scope_key = _normalize_first_answer_scope(scope)
+    start_time = datetime.combine(start_date, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
+    end_exclusive = end_date + timedelta(days=1)
+    end_time = datetime.combine(end_exclusive, datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S")
+    months = _iter_months_inclusive(start_date, end_date)
+    date_label = f"{start_date.isoformat()} 至 {end_date.isoformat()}"
+
+    real_open_df = _load_real_open_monthly(start_date, end_date)
+    real_open_map = dict(zip(real_open_df["月份"], real_open_df["real_open_count"])) if not real_open_df.empty else {}
+    real_open_count = int(sum(real_open_map.get(m, 0) for m in months))
+
+    deposit_count = 0
+    deposit_map: dict[str, int] = {}
+    monthly_source = pd.DataFrame()
+    id_col = "account"
+
+    deposit_df = _load_deposit_customers(start_date, end_date)
+    if not deposit_df.empty:
+        deposit_map = (
+            deposit_df.groupby("开户月份")["login_code"]
+            .nunique()
+            .to_dict()
+        )
+        deposit_count = int(sum(deposit_map.get(m, 0) for m in months))
+
+    if scope_key == "deposit":
+        first_answer_all = _load_first_answer_df()
+        monthly_source = _match_deposit_first_answer(deposit_df, first_answer_all)
+        id_col = "login_code"
+    else:
+        monthly_source = _load_first_answer_df(start_time, end_time)
+        if not monthly_source.empty:
+            monthly_source = monthly_source[monthly_source["月份"].isin(months)].copy()
+
+    type_counts = _build_type_counts(monthly_source, id_col)
+    total_answered = sum(type_counts.values())
+    if scope_key == "deposit":
+        coverage_rate = _first_answer_pct(total_answered, deposit_count)
+    else:
+        coverage_rate = "100.0%" if total_answered else "0.0%"
+
+    types = [
+        {
+            "type_name": name,
+            "count": type_counts[name],
+            "rate": _first_answer_pct(type_counts[name], total_answered),
+        }
+        for name in FIRST_ANSWER_TYPE_ORDER
+    ]
+
+    monthly_rows: list[dict] = []
+    for month in months:
+        month_df = monthly_source[monthly_source["月份"] == month] if not monthly_source.empty else monthly_source
+        month_counts = _build_type_counts(month_df, id_col)
+        month_total = sum(month_counts.values())
+        month_deposit = int(deposit_map.get(month, 0))
+        month_real = int(real_open_map.get(month, 0))
+        for name in FIRST_ANSWER_TYPE_ORDER:
+            monthly_rows.append({
+                "month": month,
+                "type_name": name,
+                "count": month_counts[name],
+                "rate": _first_answer_pct(month_counts[name], month_total),
+                "deposit_count": month_deposit,
+                "real_open_count": month_real,
+            })
+
+    return FirstAnswerStatResp(
+        scope=scope_key,
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        date_label=date_label,
+        type_order=FIRST_ANSWER_TYPE_ORDER,
+        total_answered=total_answered,
+        deposit_count=deposit_count,
+        real_open_count=real_open_count,
+        coverage_rate=coverage_rate,
+        types=types,
+        monthly=monthly_rows,
+    )
+
+
+def _first_answer_month_rows_from_cached(cached: dict, month_key: str) -> list[dict]:
+    rows = []
+    for row in cached.get("monthly") or []:
+        if row.get("month") == month_key:
+            rows.append({
+                "month": row["month"],
+                "type_name": row["type_name"],
+                "count": int(row.get("count") or 0),
+                "rate": row.get("rate") or "0.0%",
+                "deposit_count": int(row.get("deposit_count") or 0),
+                "real_open_count": int(row.get("real_open_count") or 0),
+            })
+    if rows:
+        return rows
+    return [
+        {
+            "month": month_key,
+            "type_name": name,
+            "count": 0,
+            "rate": "0.0%",
+            "deposit_count": 0,
+            "real_open_count": 0,
+        }
+        for name in FIRST_ANSWER_TYPE_ORDER
+    ]
+
+
+def _assemble_first_answer_stat(
+    scope: str,
+    start_date: date,
+    end_date: date,
+    monthly_rows: list[dict],
+) -> FirstAnswerStatResp:
+    months = _iter_months_inclusive(start_date, end_date)
+    by_month: dict[str, list[dict]] = {month: [] for month in months}
+    for row in monthly_rows:
+        month = row.get("month")
+        if month in by_month:
+            by_month[month].append(row)
+
+    filled: list[dict] = []
+    type_counts = {name: 0 for name in FIRST_ANSWER_TYPE_ORDER}
+    deposit_count = 0
+    real_open_count = 0
+    for month in months:
+        month_rows = by_month[month]
+        counts = {name: 0 for name in FIRST_ANSWER_TYPE_ORDER}
+        month_deposit = 0
+        month_real = 0
+        if month_rows:
+            month_deposit = int(month_rows[0].get("deposit_count") or 0)
+            month_real = int(month_rows[0].get("real_open_count") or 0)
+            for row in month_rows:
+                name = row.get("type_name")
+                if name in counts:
+                    counts[name] += int(row.get("count") or 0)
+        month_total = sum(counts.values())
+        deposit_count += month_deposit
+        real_open_count += month_real
+        for name in FIRST_ANSWER_TYPE_ORDER:
+            type_counts[name] += counts[name]
+            filled.append({
+                "month": month,
+                "type_name": name,
+                "count": counts[name],
+                "rate": _first_answer_pct(counts[name], month_total),
+                "deposit_count": month_deposit,
+                "real_open_count": month_real,
+            })
+
+    total_answered = sum(type_counts.values())
+    if scope == "deposit":
+        coverage_rate = _first_answer_pct(total_answered, deposit_count)
+    else:
+        coverage_rate = "100.0%" if total_answered else "0.0%"
+    types = [
+        {
+            "type_name": name,
+            "count": type_counts[name],
+            "rate": _first_answer_pct(type_counts[name], total_answered),
+        }
+        for name in FIRST_ANSWER_TYPE_ORDER
+    ]
+    return FirstAnswerStatResp(
+        scope=scope,
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        date_label=f"{start_date.isoformat()} 至 {end_date.isoformat()}",
+        type_order=FIRST_ANSWER_TYPE_ORDER,
+        total_answered=total_answered,
+        deposit_count=deposit_count,
+        real_open_count=real_open_count,
+        coverage_rate=coverage_rate,
+        types=types,
+        monthly=filled,
+    )
+
+
+@lru_cache(maxsize=1)
+def _load_first_answer_history() -> dict[str, dict]:
+    if not FIRST_ANSWER_JSON_PATH.exists():
+        return {}
+    try:
+        with open(FIRST_ANSWER_JSON_PATH, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+        return {str(year): value for year, value in (payload.get("data") or {}).items()}
+    except Exception as e:
+        print(f"读取首次接听历史缓存失败: {e}")
+        return {}
+
+
+def clear_first_answer_history_cache():
+    _load_first_answer_history.cache_clear()
+    _load_all_first_answer_df_cached.cache_clear()
+
+
+def query_first_answer_stat(
+    start_date: date,
+    end_date: date,
+    scope: str = "all",
+) -> FirstAnswerStatResp:
+    """2015-2025 优先读静态 JSON，2026 年起在线查库。"""
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+    scope_key = _normalize_first_answer_scope(scope)
+    months = _iter_months_inclusive(start_date, end_date)
+    history = _load_first_answer_history()
+    monthly_rows: list[dict] = []
+    live_start: date | None = None
+    live_end: date | None = None
+
+    for month_key in months:
+        month_start = date.fromisoformat(f"{month_key}-01")
+        if month_start < FIRST_ANSWER_HISTORY_BOUNDARY:
+            cached_year = history.get(str(month_start.year)) or {}
+            cached = cached_year.get(scope_key)
+            if cached:
+                monthly_rows.extend(_first_answer_month_rows_from_cached(cached, month_key))
+                continue
+        live_start = month_start if live_start is None else min(live_start, month_start)
+        live_end = _month_end(month_start) if live_end is None else max(live_end, _month_end(month_start))
+
+    if live_start is not None and live_end is not None:
+        live_end = min(live_end, end_date)
+        live_start = max(live_start, start_date)
+        live_result = _query_first_answer_stat_from_db(live_start, live_end, scope_key)
+        monthly_rows.extend([row.model_dump() for row in live_result.monthly])
+
+    return _assemble_first_answer_stat(scope_key, start_date, end_date, monthly_rows)
+
+
+def build_first_answer_history_payload(
+    start_year: int = 2015,
+    end_year: int = 2025,
+) -> dict:
+    """批量生成 2015-2025 首次接听类型分析（供 regenerate 脚本写入 JSON）。"""
+    data: dict[str, dict] = {}
+    for year in range(start_year, end_year + 1):
+        print(f"  查询年份: {year}")
+        start_d = date(year, 1, 1)
+        end_d = date(year, 12, 31)
+        year_payload: dict[str, dict] = {}
+        for scope_key in ("all", "deposit"):
+            result = _query_first_answer_stat_from_db(start_d, end_d, scope_key)
+            month_keys = {row.month for row in result.monthly}
+            if len(month_keys) != 12:
+                raise RuntimeError(f"{year} {scope_key} 首次接听缓存不完整：应有 12 个月")
+            year_payload[scope_key] = result.model_dump()
+            print(
+                f"    {scope_key}: 接听={result.total_answered}, "
+                f"开户={result.real_open_count}, 已入金={result.deposit_count}"
+            )
+        data[str(year)] = year_payload
+    return {
+        "meta": {
+            "logic": "first_answer_stat_v3_open_deposit_cols",
+            "start_year": start_year,
+            "end_year": end_year,
+            "scopes": ["all", "deposit"],
+            "open_calendar": "london_gold_trading_day",
+            "generated_at": datetime.now().isoformat(timespec="seconds"),
+        },
+        "data": data,
+    }
+
+
+CLOSE_PNL_BUCKETS = [
+    "15分钟或以内",
+    ">15分钟, 60分钟或以内",
+    ">60分钟, 24小时或以内",
+    ">24小时",
+]
+
+CLOSE_PNL_METRICS = [
+    {"key": "profit_amt", "label": "i) 盈利交易的总金额", "kind": "amount"},
+    {"key": "loss_amt", "label": "ii) 亏损交易的总金额", "kind": "amount"},
+    {"key": "amt_ratio", "label": "iii) 盈亏金额比例", "kind": "ratio"},
+    {"key": "profit_cnt", "label": "i) 盈利交易的笔数", "kind": "count"},
+    {"key": "loss_cnt", "label": "ii) 亏损交易的笔数", "kind": "count"},
+    {"key": "cnt_ratio", "label": "iii) 盈亏笔数比例", "kind": "ratio"},
+]
+
+
+def _empty_close_pnl_bucket() -> dict:
+    return {
+        "profit_amt": 0.0,
+        "loss_amt": 0.0,
+        "amt_ratio": None,
+        "profit_cnt": 0,
+        "loss_cnt": 0,
+        "cnt_ratio": None,
+    }
+
+
+def _hold_minutes_bucket(minutes: int) -> str:
+    if minutes <= 15:
+        return CLOSE_PNL_BUCKETS[0]
+    if minutes <= 60:
+        return CLOSE_PNL_BUCKETS[1]
+    if minutes <= 24 * 60:
+        return CLOSE_PNL_BUCKETS[2]
+    return CLOSE_PNL_BUCKETS[3]
+
+
+def _close_pnl_ratio(numerator: float, denominator: float):
+    if not denominator:
+        return None
+    return round(abs(numerator / denominator), 2)
+
+
+def _format_close_pnl_value(metric: dict, raw: dict) -> str:
+    value = raw[metric["key"]]
+    if metric["kind"] == "count":
+        return str(int(value))
+    if metric["kind"] == "ratio":
+        return "-" if value is None else f"{value:.2f}"
+    return f"{float(value):.2f}"
+
+
+def _month_list(start_month: date, end_month: date) -> list[str]:
+    months = []
+    year, month = start_month.year, start_month.month
+    while (year, month) <= (end_month.year, end_month.month):
+        months.append(f"{year:04d}-{month:02d}")
+        if month == 12:
+            year, month = year + 1, 1
+        else:
+            month += 1
+    return months
+
+
+def query_close_pnl_stat(start_month: date, end_month: date) -> dict:
+    """
+    看板十：按平仓交易日归月，按持仓时长分档统计盈亏金额/笔数。
+    当月未结束时，统计到前一个已结束的伦敦金交易日（不含进行中的交易日）。
+    """
+    cutoff_day = last_completed_trading_day()
+    start_month = date(start_month.year, start_month.month, 1)
+    end_month = date(end_month.year, end_month.month, 1)
+    if start_month > end_month:
+        start_month, end_month = end_month, start_month
+
+    months = _month_list(start_month, end_month)
+    query_start = datetime.combine(start_month - timedelta(days=1), datetime.min.time())
+    query_end = datetime.combine(_month_end(end_month) + timedelta(days=2), datetime.min.time())
+
+    sql = text("""
+        SELECT OPEN_TIME, CLOSE_TIME, PROFIT, SWAPS, COMMISSION_AGENT
+        FROM js_mt5_deals_view
+        WHERE CLOSE_TIME >= :start_dt
+          AND CLOSE_TIME < :end_dt
+          AND OPEN_TIME IS NOT NULL
+          AND CLOSE_TIME IS NOT NULL
+          AND CLOSE_TIME > '2000-01-01'
+    """)
+
+    with engine_profit.connect() as conn:
+        df = pd.read_sql(sql, conn, params={"start_dt": query_start, "end_dt": query_end})
+
+    month_data = {
+        month: {bucket: _empty_close_pnl_bucket() for bucket in CLOSE_PNL_BUCKETS}
+        for month in months
+    }
+
+    if not df.empty:
+        df.columns = df.columns.str.lower()
+        df["open_time"] = pd.to_datetime(df["open_time"], errors="coerce")
+        df["close_time"] = pd.to_datetime(df["close_time"], errors="coerce")
+        df["profit"] = pd.to_numeric(df["profit"], errors="coerce").fillna(0)
+        df["swaps"] = pd.to_numeric(df["swaps"], errors="coerce").fillna(0)
+        df["commission_agent"] = pd.to_numeric(df["commission_agent"], errors="coerce").fillna(0)
+        df = df.dropna(subset=["open_time", "close_time"])
+        df["hold_minutes"] = (
+            (df["close_time"] - df["open_time"]).dt.total_seconds() // 60
+        ).astype("int64")
+        df = df[df["hold_minutes"] >= 0].copy()
+        df["pnl"] = df["profit"] + df["swaps"] + df["commission_agent"]
+        df["trading_day"] = df["close_time"].map(
+            lambda ts: get_trading_day(ts.to_pydatetime())
+        )
+        df["trading_day"] = pd.to_datetime(df["trading_day"], errors="coerce")
+        df = df.dropna(subset=["trading_day"])
+        df["month"] = df["trading_day"].dt.strftime("%Y-%m")
+        df = df[
+            df["month"].isin(months)
+            & (df["trading_day"].dt.date <= cutoff_day)
+        ].copy()
+        df["bucket"] = df["hold_minutes"].map(_hold_minutes_bucket)
+
+        if not df.empty:
+            for (month, bucket), group in df.groupby(["month", "bucket"]):
+                if month not in month_data or bucket not in month_data[month]:
+                    continue
+                profit_amt = round(float(group.loc[group["pnl"] > 0, "pnl"].sum()), 2)
+                loss_amt = round(float(group.loc[group["pnl"] < 0, "pnl"].sum()), 2)
+                profit_cnt = int((group["pnl"] > 0).sum())
+                loss_cnt = int((group["pnl"] < 0).sum())
+                month_data[month][bucket] = {
+                    "profit_amt": profit_amt,
+                    "loss_amt": loss_amt,
+                    "amt_ratio": _close_pnl_ratio(profit_amt, loss_amt),
+                    "profit_cnt": profit_cnt,
+                    "loss_cnt": loss_cnt,
+                    "cnt_ratio": _close_pnl_ratio(profit_cnt, loss_cnt),
+                }
+
+    tables = []
+    for month in months:
+        rows = []
+        for metric in CLOSE_PNL_METRICS:
+            rows.append({
+                "label": metric["label"],
+                "cells": [
+                    _format_close_pnl_value(metric, month_data[month][bucket])
+                    for bucket in CLOSE_PNL_BUCKETS
+                ],
+            })
+        tables.append({"month": month, "rows": rows})
+
+    return {
+        "start": start_month.strftime("%Y-%m"),
+        "end": end_month.strftime("%Y-%m"),
+        "date_label": f"{start_month.strftime('%Y-%m')} 至 {end_month.strftime('%Y-%m')}",
+        "buckets": CLOSE_PNL_BUCKETS,
+        "metrics": CLOSE_PNL_METRICS,
+        "tables": tables,
+        "month_data": month_data,
+        "cutoff_day": cutoff_day.isoformat(),
     }
